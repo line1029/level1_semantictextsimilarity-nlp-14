@@ -130,3 +130,8 @@ dmypy.json
 
 # macOS
 *DS_Store
+
+# custom
+**/data
+**/.ipynb_checkpoints
+**/lightning_logs
