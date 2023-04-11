@@ -8,8 +8,6 @@ import transformers
 import torch
 import torchmetrics
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import WandbLogger
-import wandb
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -47,7 +45,7 @@ class Dataloader(pl.LightningDataModule):
         self.test_dataset = None
         self.predict_dataset = None
 
-        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_name, max_length=128)
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_name, max_length=160)
         self.target_columns = ['label']
         self.delete_columns = ['id']
         self.text_columns = ['sentence_1', 'sentence_2']
@@ -114,19 +112,18 @@ class Dataloader(pl.LightningDataModule):
 
 
 class Model(pl.LightningModule):
-    def __init__(self, model_name, lr, weight_decay):
+    def __init__(self, model_name, lr):
         super().__init__()
         self.save_hyperparameters()
 
         self.model_name = model_name
         self.lr = lr
-        self.weight_decay = weight_decay
 
         # 사용할 모델을 호출합니다.
         self.plm = transformers.AutoModelForSequenceClassification.from_pretrained(
             pretrained_model_name_or_path=model_name, num_labels=1)
-        # Loss 계산을 위해 사용될 MSELoss를 호출합니다.
-        self.loss_func = torch.nn.MSELoss()
+        # Loss 계산을 위해 사용될 L1Loss를 호출합니다.
+        self.loss_func = torch.nn.L1Loss()
 
     def forward(self, x):
         x = self.plm(x)['logits']
@@ -164,17 +161,8 @@ class Model(pl.LightningModule):
         return logits.squeeze()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        # # lr scheduler를 이용해 warm-up stage 추가
-        # scheduler = transformers.get_linear_schedule_with_warmup(
-        #     optimizer=optimizer,
-        #     num_warmup_steps=self.warmup_steps,
-        #     num_training_steps=self.total_steps
-        # )
-        # return [optimizer], [scheduler]
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
         return optimizer
-
-
 
 
 if __name__ == '__main__':
@@ -187,88 +175,28 @@ if __name__ == '__main__':
     parser.add_argument('--max_epoch', default=1, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=1e-5, type=float)
-    parser.add_argument('--train_path', default='~/data/train.csv')
-    parser.add_argument('--dev_path', default='~/data/dev.csv')
-    parser.add_argument('--test_path', default='~/data/dev.csv')
-    parser.add_argument('--predict_path', default='~/data/test.csv')
-    parser.add_argument('--weight_decay', default=0.1)
-    parser.add_argument('--warm_up_ratio', default=0)
-    args = parser.parse_args()
+    parser.add_argument('--train_path', default='./data/train.csv')
+    parser.add_argument('--dev_path', default='./data/dev.csv')
+    parser.add_argument('--test_path', default='./data/dev.csv')
+    parser.add_argument('--predict_path', default='./data/test.csv')
+    args = parser.parse_args(args=[])
 
-    sweep_config = {
-        'method': 'random', # random: 임의의 값의 parameter 세트를 선택
-        'parameters': {
-            'learning_rate':{
-                'values':[10**(-5), 2*10**(-5), 3*10**(-5), 5*10**(-5)]
-            },
-            'max_epoch':{
-                'values':[3, 4, 5, 10]
-            },
-            'batch_size':{
-                'values':[8, 16, 32]
-            },
-            'weight_decay':{
-                'values':[0., 0.01, 0.02, 0.03]
-            }
-        },
-        'metric': {
-            'name':'val_pearson',
-            'goal':'maximize'
-        }
-    }
+    # dataloader와 model을 생성합니다.
+    dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
+                            args.test_path, args.predict_path)
 
+    # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
+    trainer = pl.Trainer(accelerator='cpu', max_epochs=args.max_epoch, log_every_n_steps=1)
 
-    # Sweep을 통해 실행될 학습 코드를 작성합니다.
-    def sweep_train(config=None):
-        wandb.init(config=config)
-        config = wandb.config
+    # Inference part
+    # 저장된 모델로 예측을 진행합니다.
+    model = torch.load('model.pt')
+    predictions = trainer.predict(model=model, datamodule=dataloader)
 
-        dataloader = Dataloader(args.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
-                                args.test_path, args.predict_path)
-        # total_steps = (9324 // config.batch_size + (9324 % config.batch_size != 0)) * config.max_epoch
-        # warmup_steps = total_steps * config.warm_up_ratio
-        model = Model(
-            args.model_name,
-            config.learning_rate,
-            config.weight_decay,
-            # warmup_steps,
-            # total_steps
-        )
-        wandb_logger = WandbLogger(project="sts")
+    # 예측된 결과를 형식에 맞게 반올림하여 준비합니다.
+    predictions = list(round(float(i), 1) for i in torch.cat(predictions))
 
-        trainer = pl.Trainer(accelerator='gpu', max_epochs=config.max_epoch, logger=wandb_logger, log_every_n_steps=1)
-        trainer.fit(model=model, datamodule=dataloader)
-        trainer.test(model=model, datamodule=dataloader)
-    
-    # Sweep 생성
-
-    sweep_id = wandb.sweep(
-        sweep=sweep_config,     # config 딕셔너리를 추가합니다.
-        project='sts'  # project의 이름을 추가합니다.
-    )
-    wandb.agent(
-        sweep_id=sweep_id,      # sweep의 정보를 입력하고
-        function=sweep_train,   # train이라는 모델을 학습하는 코드를
-        count=30                 # 총 3회 실행해봅니다.
-    )
-    
-    # wandb logger
-    # wandb_logger = WandbLogger(project="sts")
-
-    # # dataloader와 model을 생성합니다.
-    # dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
-    #                         args.test_path, args.predict_path)
-    # total_steps = (9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.max_epoch
-    # warmup_steps = total_steps * args.warm_up_ratio
-    # model = Model(args.model_name, args.learning_rate, args.weight_decay, warmup_steps, total_steps)
-    # # print(model)
-
-    # # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
-    # trainer = pl.Trainer(accelerator='gpu', max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1)
-
-    # # Train part
-    # trainer.fit(model=model, datamodule=dataloader)
-    # trainer.test(model=model, datamodule=dataloader)
-
-    # # 학습이 완료된 모델을 저장합니다.
-    # torch.save(model, 'model.pt')
+    # output 형식을 불러와서 예측된 결과로 바꿔주고, output.csv로 출력합니다.
+    output = pd.read_csv('./data/sample_submission.csv')
+    output['target'] = predictions
+    output.to_csv('output.csv', index=False)
