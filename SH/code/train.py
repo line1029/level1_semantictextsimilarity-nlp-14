@@ -148,7 +148,7 @@ class Model(pl.LightningModule):
 
         return loss
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch, batch_idx):x
         x, y = batch
         logits = self(x)
 
@@ -175,6 +175,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_epoch', default=1, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=1e-5, type=float)
+    parser.add_argument('--weight_decay', default=0.0, type=float)
     parser.add_argument('--train_path', default='./data/train.csv')
     parser.add_argument('--dev_path', default='./data/dev.csv')
     parser.add_argument('--test_path', default='./data/dev.csv')
@@ -182,8 +183,7 @@ if __name__ == '__main__':
     args = parser.parse_args(args=[])
 
     # dataloader와 model을 생성합니다.
-    dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
-                            args.test_path, args.predict_path)
+    dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path, args.test_path, args.predict_path)
     model = Model(args.model_name, args.learning_rate)
 
     # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
@@ -196,4 +196,5 @@ if __name__ == '__main__':
     trainer.test(model=model, datamodule=dataloader)
 
     # 학습이 완료된 모델을 저장합니다.
-    torch.save(model, 'model_base.pt')
+    model_name = f"./models/{args.model_name}_bs{args.batch_size}_me{args.max_epoch}_lr{args.learning_rate}.pt"
+    torch.save(model, model_name)
