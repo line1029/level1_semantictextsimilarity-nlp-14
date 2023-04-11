@@ -9,7 +9,8 @@ import torch
 import torchmetrics
 import pytorch_lightning as pl
 
-from torch.optim.lr_scheduler import StepLR
+from pytorch_lightning.loggers import WandbLogger
+import wandb
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -47,7 +48,8 @@ class Dataloader(pl.LightningDataModule):
         self.test_dataset = None
         self.predict_dataset = None
 
-        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_name, max_length=160)
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(
+            model_name, max_length=160)
         self.target_columns = ['label']
         self.delete_columns = ['id']
         self.text_columns = ['sentence_1', 'sentence_2']
@@ -56,8 +58,10 @@ class Dataloader(pl.LightningDataModule):
         data = []
         for idx, item in tqdm(dataframe.iterrows(), desc='tokenizing', total=len(dataframe)):
             # 두 입력 문장을 [SEP] 토큰으로 이어붙여서 전처리합니다.
-            text = '[SEP]'.join([item[text_column] for text_column in self.text_columns])
-            outputs = self.tokenizer(text, add_special_tokens=True, padding='max_length', truncation=True)
+            text = '[SEP]'.join([item[text_column]
+                                for text_column in self.text_columns])
+            outputs = self.tokenizer(
+                text, add_special_tokens=True, padding='max_length', truncation=True)
             data.append(outputs['input_ids'])
         return data
 
@@ -145,8 +149,8 @@ class Model(pl.LightningModule):
         logits = self(x)
         loss = self.loss_func(logits, y.float())
         self.log("val_loss", loss)
-
-        self.log("val_pearson", torchmetrics.functional.pearson_corrcoef(logits.squeeze(), y.squeeze()))
+        self.log("val_pearson", torchmetrics.functional.pearson_corrcoef(
+            logits.squeeze(), y.squeeze()))
 
         return loss
 
@@ -154,7 +158,8 @@ class Model(pl.LightningModule):
         x, y = batch
         logits = self(x)
 
-        self.log("test_pearson", torchmetrics.functional.pearson_corrcoef(logits.squeeze(), y.squeeze()))
+        self.log("test_pearson", torchmetrics.functional.pearson_corrcoef(
+            logits.squeeze(), y.squeeze()))
 
     def predict_step(self, batch, batch_idx):
         x = batch
@@ -165,13 +170,11 @@ class Model(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
         return optimizer
-        # scheduler 추가
-        # scheduler = StepLR(optimizer, step_size=1, gamma=0.95)
-        # return [optimizer], [scheduler]
-        
 
 
 if __name__ == '__main__':
+    # seed setting
+    pl.seed_everything(1348954, workers=True)
     # 하이퍼 파라미터 등 각종 설정값을 입력받습니다
     # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
@@ -187,21 +190,60 @@ if __name__ == '__main__':
     parser.add_argument('--predict_path', default='./data/test.csv')
     # args = parser.parse_args(args=[])
     args = parser.parse_args()
-    print(args)
-    
-    # dataloader와 model을 생성합니다.
-    dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
-                            args.test_path, args.predict_path)
-    model = Model(args.model_name, args.learning_rate)
 
-    # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
-    trainer = pl.Trainer(accelerator='gpu', max_epochs=args.max_epoch, log_every_n_steps=1)
+    # Sweep setting
+    # https://docs.wandb.ai/v/ko/sweeps/configuration
+    sweep_config = {
+        'method': 'random',  # random: 임의의 값의 parameter 세트를 선택
+        'parameters': {
+            'learning_rate': {
+                # parameter를 설정하는 기준을 선택합니다. uniform은 연속적으로 균등한 값들을 선택합니다.
+                # 'distribution': 'uniform',
+                # 'min': 1e-5,                 # 최소값을 설정합니다.
+                # 'max': 1e-4                  # 최대값을 설정합니다.
+                'values': [1e-5]
+            },
+            'max_epoch': {
+                'values': [1]
+            },
+            'batch_size': {
+                'values': [64]
+            }
+        },
+        'metric': {  # sweep_config의 metric은 최적화를 진행할 목표를 설정합니다.
+            'name': 'val_pearson',        # pearson 점수가 최대화가 되는 방향으로 학습을 진행합니다.
+            'goal': 'maximize'
+        }
+    }
 
-    # Train part
-    trainer.fit(model=model, datamodule=dataloader)
-    trainer.test(model=model, datamodule=dataloader)
+    def sweep_train(config=None):
+        wandb.init(config=config)
+        config = wandb.config
 
-    # 학습이 완료된 모델을 저장합니다.
-    torch.save(model, 'model.pt')
+        # dataloader와 model을 생성합니다.
+        dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle,
+                                args.train_path, args.dev_path, args.test_path, args.predict_path)
+        # model = Model(args.model_name, args.learning_rate)
+        model = Model(args.model_name, config.learning_rate)
 
-    #9,15
+        # wandb 로그 설정
+        wandb_logger = WandbLogger(project="STS")
+
+        trainer = pl.Trainer(accelerator='gpu', max_epochs=config.max_epoch,
+                             logger=wandb_logger, log_every_n_steps=1)
+        trainer.fit(model=model, datamodule=dataloader)
+        trainer.test(model=model, datamodule=dataloader)
+
+        # 학습이 완료된 모델을 저장합니다.
+        torch.save(model, 'model.pt')
+
+    # Sweep 생성
+    sweep_id = wandb.sweep(
+        sweep=sweep_config,     # config 딕셔너리를 추가합니다.
+        project='STS'  # project의 이름을 추가합니다.
+    )
+    wandb.agent(
+        sweep_id=sweep_id,      # sweep의 정보를 입력하고
+        function=sweep_train,   # train이라는 모델을 학습하는 코드를
+        count=1                # 총 n회 실행해봅니다.
+    )
