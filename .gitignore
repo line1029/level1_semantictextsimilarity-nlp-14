@@ -136,4 +136,5 @@ dmypy.json
 **/.ipynb_checkpoints
 **/lightning_logs
 **/wandb
+*.ckpt
 *.pt
