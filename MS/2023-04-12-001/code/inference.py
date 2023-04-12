@@ -24,17 +24,17 @@ if __name__ == '__main__':
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', default='klue/roberta-large', type=str)
-    parser.add_argument('--batch_size', default=8, type=int)
-    parser.add_argument('--max_epoch', default=5, type=int)
+    parser.add_argument('--batch_size', default=16, type=int)
+    parser.add_argument('--max_epoch', default=6, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=1e-5, type=float)
     parser.add_argument('--train_path', default='~/data/train.csv')
     parser.add_argument('--dev_path', default='~/data/dev.csv')
     parser.add_argument('--test_path', default='~/data/dev.csv')
     parser.add_argument('--predict_path', default='~/data/test.csv')
-    parser.add_argument('--weight_decay', default=0.1)
-    parser.add_argument('--warm_up_ratio', default=0.2)
-    parser.add_argument('--loss_func', default="Huber")
+    parser.add_argument('--weight_decay', default=0.02)
+    parser.add_argument('--warm_up_ratio', default=0.3)
+    parser.add_argument('--loss_func', default="MSE")
     args = parser.parse_args()
 
     # dataloader와 model을 생성합니다.
