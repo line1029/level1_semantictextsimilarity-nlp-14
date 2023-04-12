@@ -171,8 +171,8 @@ class Model(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
-            self.parameters(), lr=self.lr)
-        # self.parameters(), lr=1e-5)
+            # self.parameters(), lr=self.lr)
+            self.parameters(), lr=1e-5)
         return optimizer
 
 
@@ -206,22 +206,23 @@ if __name__ == '__main__':
     # Sweep setting
     # https://docs.wandb.ai/v/ko/sweeps/configuration
     sweep_config = {
-        'method': 'random',  # random: 임의의 값의 parameter 세트를 선택
+        'method': 'random',
         'parameters': {
             'lr': {
                 # # parameter를 설정하는 기준을 선택합니다. uniform은 연속적으로 균등한 값들을 선택합니다.
                 # 'distribution': 'uniform',
                 # 'min': 1e-5,                 # 최소값을 설정합니다.
                 # 'max': 3e-5                  # 최대값을 설정합니다.
-                'values': [1e-6, 3e-6, 5e-6, 1e-5]
-                # 'values': [1e-5]
+                # 'values': [1e-6, 3e-6, 5e-6, 1e-5]
+                'values': [2e-6]
             },
             'max_epoch': {
-                'values': [5, 10]
+                # 'values': [5, 10]
+                'values': [1]
             },
             'batch_size': {
-                'values': [8, 16, 32, 64]
-                # 'values': [64]
+                # 'values': [8, 16, 32, 64]
+                'values': [8]
             }
         },
         'metric': {  # sweep_config의 metric은 최적화를 진행할 목표를 설정합니다.
@@ -260,5 +261,5 @@ if __name__ == '__main__':
     wandb.agent(
         sweep_id=sweep_id,      # sweep의 정보를 입력하고
         function=sweep_train,   # train이라는 모델을 학습하는 코드를
-        count=20                # 총 n회 실행해봅니다.
+        count=1                # 총 n회 실행해봅니다.
     )
