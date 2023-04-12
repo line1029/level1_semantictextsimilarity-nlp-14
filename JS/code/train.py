@@ -11,6 +11,8 @@ import pytorch_lightning as pl
 
 from pytorch_lightning.loggers import WandbLogger
 import wandb
+import random
+import numpy as np
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -168,13 +170,23 @@ class Model(pl.LightningModule):
         return logits.squeeze()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
+        optimizer = torch.optim.AdamW(
+            self.parameters(), lr=self.lr)
+        # self.parameters(), lr=1e-5)
         return optimizer
 
 
 if __name__ == '__main__':
     # seed setting
-    pl.seed_everything(1348954, workers=True)
+    seed = 1234
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if use multi-GPU
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(seed)
+    random.seed(seed)
+    pl.seed_everything(seed)
     # 하이퍼 파라미터 등 각종 설정값을 입력받습니다
     # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
@@ -196,18 +208,20 @@ if __name__ == '__main__':
     sweep_config = {
         'method': 'random',  # random: 임의의 값의 parameter 세트를 선택
         'parameters': {
-            'learning_rate': {
-                # parameter를 설정하는 기준을 선택합니다. uniform은 연속적으로 균등한 값들을 선택합니다.
+            'lr': {
+                # # parameter를 설정하는 기준을 선택합니다. uniform은 연속적으로 균등한 값들을 선택합니다.
                 # 'distribution': 'uniform',
                 # 'min': 1e-5,                 # 최소값을 설정합니다.
-                # 'max': 1e-4                  # 최대값을 설정합니다.
-                'values': [1e-5]
+                # 'max': 3e-5                  # 최대값을 설정합니다.
+                'values': [1e-6, 3e-6, 5e-6, 1e-5]
+                # 'values': [1e-5]
             },
             'max_epoch': {
-                'values': [1]
+                'values': [5, 10]
             },
             'batch_size': {
-                'values': [64]
+                'values': [8, 16, 32, 64]
+                # 'values': [64]
             }
         },
         'metric': {  # sweep_config의 metric은 최적화를 진행할 목표를 설정합니다.
@@ -217,14 +231,15 @@ if __name__ == '__main__':
     }
 
     def sweep_train(config=None):
+        # name setting 시도해보기
         wandb.init(config=config)
         config = wandb.config
 
         # dataloader와 model을 생성합니다.
-        dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle,
+        dataloader = Dataloader(args.model_name, config.batch_size, args.shuffle,
                                 args.train_path, args.dev_path, args.test_path, args.predict_path)
         # model = Model(args.model_name, args.learning_rate)
-        model = Model(args.model_name, config.learning_rate)
+        model = Model(args.model_name, config.lr)
 
         # wandb 로그 설정
         wandb_logger = WandbLogger(project="STS")
@@ -245,5 +260,5 @@ if __name__ == '__main__':
     wandb.agent(
         sweep_id=sweep_id,      # sweep의 정보를 입력하고
         function=sweep_train,   # train이라는 모델을 학습하는 코드를
-        count=1                # 총 n회 실행해봅니다.
+        count=20                # 총 n회 실행해봅니다.
     )
