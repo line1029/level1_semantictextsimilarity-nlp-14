@@ -217,7 +217,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_epoch', default=6, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=1e-5, type=float)
-    parser.add_argument('--train_path', default='~/data/train.csv')
+    parser.add_argument('--train_path', default='~/data/train_augmented.csv')
     parser.add_argument('--dev_path', default='~/data/dev.csv')
     parser.add_argument('--test_path', default='~/data/dev.csv')
     parser.add_argument('--predict_path', default='~/data/test.csv')
@@ -226,6 +226,7 @@ if __name__ == '__main__':
     parser.add_argument('--loss_func', default="L1")
     parser.add_argument('--run_name', default="_001")
     parser.add_argument('--project_name', default="STS_roberta_large_003")
+    parser.add_argument('--eda', default=True)
     args = parser.parse_args()
 
 
@@ -304,8 +305,10 @@ if __name__ == '__main__':
     # # dataloader와 model을 생성합니다.
     dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
                             args.test_path, args.predict_path)
-    total_steps = (9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.max_epoch
-    warmup_steps = int((9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.warm_up_ratio)
+    dataloader.setup()
+    print(len(dataloader.train_dataloader()))
+    total_steps = (len(dataloader.train_dataloader())) * args.max_epoch
+    warmup_steps = int(len(dataloader.train_dataloader()) * args.warm_up_ratio)
     model = Model(
         args.model_name,
         args.learning_rate,
