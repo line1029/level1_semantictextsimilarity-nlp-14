@@ -115,7 +115,7 @@ class Dataloader(pl.LightningDataModule):
 
 
 class Model(pl.LightningModule):
-    def __init__(self, model_name, lr, weight_decay, warmup_steps, total_steps, loss_func):
+    def __init__(self, model_name, lr, weight_decay, warmup_steps, loss_func):
         super().__init__()
         self.save_hyperparameters()
 
@@ -123,7 +123,6 @@ class Model(pl.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
         self.warmup_steps = warmup_steps
-        self.total_steps = total_steps
 
         # 사용할 모델을 호출합니다.
         self.plm = transformers.AutoModelForSequenceClassification.from_pretrained(
@@ -174,10 +173,9 @@ class Model(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         # lr scheduler를 이용해 warm-up stage 추가
-        scheduler = transformers.get_linear_schedule_with_warmup(
+        scheduler = transformers.get_constant_schedule_with_warmup(
             optimizer=optimizer,
-            num_warmup_steps=self.warmup_steps,
-            num_training_steps = self.total_steps
+            num_warmup_steps=self.warmup_steps
         )
         return (
             [optimizer],
@@ -197,32 +195,22 @@ class Model(pl.LightningModule):
 
 if __name__ == '__main__':
     # seed
-    seed = 42
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # if use multi-GPU
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    np.random.seed(seed)
-    random.seed(seed)
-    pl.seed_everything(seed)
+    pl.seed_everything(42, workers=True)
     # 하이퍼 파라미터 등 각종 설정값을 입력받습니다
     # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', default='klue/roberta-large', type=str)
-    parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_epoch', default=6, type=int)
+    parser.add_argument('--model_name', default='klue/roberta-base', type=str)
+    parser.add_argument('--batch_size', default=32, type=int)
+    parser.add_argument('--max_epoch', default=8, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=1e-5, type=float)
-    parser.add_argument('--train_path', default='~/data/train.csv')
-    parser.add_argument('--dev_path', default='~/data/dev.csv')
-    parser.add_argument('--test_path', default='~/data/dev.csv')
-    parser.add_argument('--predict_path', default='~/data/test.csv')
-    parser.add_argument('--weight_decay', default=0.01)
-    parser.add_argument('--warm_up_ratio', default=0.3)
-    parser.add_argument('--loss_func', default="MSE")
-    parser.add_argument('--run_name', default="roberta_large_001")
+    parser.add_argument('--train_path', default='~/SH/data/train.csv')
+    parser.add_argument('--dev_path', default='~/SH/data/dev.csv')
+    parser.add_argument('--test_path', default='~/SH/data/dev.csv')
+    parser.add_argument('--predict_path', default='~/SH/data/test.csv')
+    parser.add_argument('--weight_decay', default=0.)
+    parser.add_argument('--warm_up_ratio', default=0)
     args = parser.parse_args()
 
     sweep_config = {
@@ -235,7 +223,7 @@ if __name__ == '__main__':
                 'values':[3, 4, 5]
             },
             'batch_size':{
-                'values':[8, 16]
+                'values':[8, 16, 32]
             },
             'weight_decay':{
                 'values':[0., 0.01, 0.1]
@@ -244,7 +232,7 @@ if __name__ == '__main__':
                 'values':[0., 0.1, 0.2, 0.6]
             },
             'loss_func':{
-                'values':["MSE", "Huber"]
+                'values':["MSE", "L1", "Huber"]
             }
         },
         'metric': {
@@ -269,7 +257,7 @@ if __name__ == '__main__':
             warmup_steps,
             config.loss_func
         )
-        wandb_logger = WandbLogger(project="sts-04-12-001")
+        wandb_logger = WandbLogger(project="MS-sts-230411-003-SH")
 
         trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=config.max_epoch, logger=wandb_logger, log_every_n_steps=1, gradient_clip_val=1.)
         trainer.fit(model=model, datamodule=dataloader)
@@ -277,47 +265,36 @@ if __name__ == '__main__':
     
     # Sweep 생성
 
-    # sweep_id = wandb.sweep(
-    #     sweep=sweep_config,     # config 딕셔너리를 추가합니다.
-    #     project='sts-04-12-001'  # project의 이름을 추가합니다.
-    # )
-    # wandb.agent(
-    #     sweep_id=sweep_id,      # sweep의 정보를 입력하고
-    #     function=sweep_train,   # train이라는 모델을 학습하는 코드를
-    #     count=40                 # 총 3회 실행해봅니다.
-    # )
-    
-    # wandb logger
-    wandb.init()
-    wandb.run.name = args.run_name
-    wandb_logger = WandbLogger(project="sts-004")
-
-    # dataloader와 model을 생성합니다.
-    dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
-                            args.test_path, args.predict_path)
-    total_steps = (9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.max_epoch
-    warmup_steps = int((9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.warm_up_ratio)
-    model = Model(
-        args.model_name,
-        args.learning_rate,
-        args.weight_decay,
-        warmup_steps,
-        total_steps,
-        args.loss_func
+    sweep_id = wandb.sweep(
+        sweep=sweep_config,     # config 딕셔너리를 추가합니다.
+        project='MS-sts-230411-003-SH'  # project의 이름을 추가합니다.
     )
-    # print(model)
-
-    # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
-    trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1)
-
-    # use Tuner to get optimized batch size
-    # tuner = Tuner(trainer)
-    # tuner.scale_batch_size(model=model, datamodule=dataloader, mode="binsearch")
-
-    # Train part
-    trainer.fit(model=model, datamodule=dataloader)
-    trainer.test(model=model, datamodule=dataloader)
-    wandb.finish()
+    wandb.agent(
+        sweep_id=sweep_id,      # sweep의 정보를 입력하고
+        function=sweep_train,   # train이라는 모델을 학습하는 코드를
+        count=40                 # 총 3회 실행해봅니다.
+    )
     
-    # 학습이 완료된 모델을 저장합니다.
-    torch.save(model, 'model.pt')
+    # # wandb logger
+    # wandb_logger = WandbLogger(project="sts-001")
+
+    # # dataloader와 model을 생성합니다.
+    # dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
+    #                         args.test_path, args.predict_path)
+    # warmup_steps = 200
+    # model = Model(args.model_name, args.learning_rate, args.weight_decay, warmup_steps, total_steps)
+    # # print(model)
+
+    # # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
+    # trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1)
+
+    # # use Tuner to get optimized batch size
+    # # tuner = Tuner(trainer)
+    # # tuner.scale_batch_size(model=model, datamodule=dataloader, mode="binsearch")
+
+    # # Train part
+    # trainer.fit(model=model, datamodule=dataloader)
+    # trainer.test(model=model, datamodule=dataloader)
+
+    # # 학습이 완료된 모델을 저장합니다.
+    # torch.save(model, 'model.pt')
