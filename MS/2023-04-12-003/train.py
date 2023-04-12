@@ -207,12 +207,12 @@ if __name__ == '__main__':
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
     random.seed(seed)
-    pl.seed_everything(seed)
+    pl.seed_everything(seed, workers=True)
     # 하이퍼 파라미터 등 각종 설정값을 입력받습니다
     # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', default='klue/roberta-large', type=str)
+    parser.add_argument('--model_name', default="klue/roberta-large", type=str)
     parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--max_epoch', default=6, type=int)
     parser.add_argument('--shuffle', default=True)
@@ -225,110 +225,107 @@ if __name__ == '__main__':
     parser.add_argument('--warm_up_ratio', default=0.3)
     parser.add_argument('--loss_func', default="L1")
     parser.add_argument('--run_name', default="_001")
-    parser.add_argument('--project_name', default="STS_roberta_large_001")
+    parser.add_argument('--project_name', default="STS_roberta_large_003")
     args = parser.parse_args()
 
-    sweep_config = {
-        'method': 'random', # random: 임의의 값의 parameter 세트를 선택
-        'parameters': {
-            'learning_rate':{
-                'values':[1e-5, 2e-5, 3e-5, 5e-5]
-            },
-            'max_epoch':{
-                'values':[4, 5, 6]
-            },
-            'batch_size':{
-                'values':[16]
-            },
-            'weight_decay':{
-                'values':[0., 0.01, 0.1]
-            },
-            'warm_up_ratio':{
-                'values':[0, 0.1, 0.2, 0.6]
-            },
-            'loss_func':{
-                'values':["MSE", "Huber", "L1"]
-            }
-        },
-        'metric': {
-            'name':'val_pearson',
-            'goal':'maximize'
-        }
-    }
 
     ### HP Tuning
     # Sweep을 통해 실행될 학습 코드를 작성합니다.
-    def sweep_train(config=None):
-        wandb.init(config=config)
-        config = wandb.config
+    # sweep_config = {
+    #     'method': 'random', # random: 임의의 값의 parameter 세트를 선택
+    #     'parameters': {
+    #         'learning_rate':{
+    #             'values':[1e-5, 2e-5, 3e-5, 5e-5]
+    #         },
+    #         'max_epoch':{
+    #             'values':[4, 5, 6]
+    #         },
+    #         'batch_size':{
+    #             'values':[16]
+    #         },
+    #         'weight_decay':{
+    #             'values':[0., 0.01, 0.1]
+    #         },
+    #         'warm_up_ratio':{
+    #             'values':[0, 0.1, 0.2, 0.6]
+    #         },
+    #         'loss_func':{
+    #             'values':["MSE", "Huber", "L1"]
+    #         }
+    #     },
+    #     'metric': {
+    #         'name':'val_pearson',
+    #         'goal':'maximize'
+    #     }
+    # }
 
-        dataloader = Dataloader(args.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
-                                args.test_path, args.predict_path)
-        total_steps = (9324 // config.batch_size + (9324 % config.batch_size != 0)) * config.max_epoch
-        warmup_steps = int((9324 // config.batch_size + (9324 % config.batch_size != 0)) * config.warm_up_ratio)
-        model = Model(
-            args.model_name,
-            config.learning_rate,
-            config.weight_decay,
-            warmup_steps,
-            total_steps,
-            config.loss_func
-        )
-        wandb_logger = WandbLogger(project=args.project_name)
+    # def sweep_train(config=None):
+    #     wandb.init(config=config)
+    #     config = wandb.config
 
-        trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=config.max_epoch, logger=wandb_logger, log_every_n_steps=1)
-        trainer.fit(model=model, datamodule=dataloader)
-        trainer.test(model=model, datamodule=dataloader)
+    #     dataloader = Dataloader(args.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
+    #                             args.test_path, args.predict_path)
+    #     total_steps = (9324 // config.batch_size + (9324 % config.batch_size != 0)) * config.max_epoch
+    #     warmup_steps = int((9324 // config.batch_size + (9324 % config.batch_size != 0)) * config.warm_up_ratio)
+    #     model = Model(
+    #         args.model_name,
+    #         config.learning_rate,
+    #         config.weight_decay,
+    #         warmup_steps,
+    #         total_steps,
+    #         config.loss_func
+    #     )
+    #     wandb_logger = WandbLogger(project=args.project_name)
+
+    #     trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=config.max_epoch, logger=wandb_logger, log_every_n_steps=1)
+    #     trainer.fit(model=model, datamodule=dataloader)
+    #     trainer.test(model=model, datamodule=dataloader)
     
-    # Sweep 생성
+    # # Sweep 생성
 
-    sweep_id = wandb.sweep(
-        sweep=sweep_config,     # config 딕셔너리를 추가합니다.
-        project=args.project_name  # project의 이름을 추가합니다.
-    )
-    wandb.agent(
-        sweep_id=sweep_id,      # sweep의 정보를 입력하고
-        function=sweep_train,   # train이라는 모델을 학습하는 코드를
-        count=40                 # 총 3회 실행해봅니다.
-    )
+    # sweep_id = wandb.sweep(
+    #     sweep=sweep_config,     # config 딕셔너리를 추가합니다.
+    #     project=args.project_name  # project의 이름을 추가합니다.
+    # )
+    # wandb.agent(
+    #     sweep_id=sweep_id,      # sweep의 정보를 입력하고
+    #     function=sweep_train,   # train이라는 모델을 학습하는 코드를
+    #     count=40                 # 총 3회 실행해봅니다.
+    # )
+
     ###
 
 
     
-<<<<<<< HEAD
     ### actual model train
-    # # wandb logger
-    # wandb_logger = WandbLogger(project=args.project_name, name=args.loss_func + args.run_name)
+    # wandb logger
+    wandb_logger = WandbLogger(project=args.project_name, name=args.loss_func + args.run_name)
 
     # # dataloader와 model을 생성합니다.
-    # dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
-    #                         args.test_path, args.predict_path)
-    # total_steps = (9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.max_epoch
-    # warmup_steps = int((9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.warm_up_ratio)
-    # model = Model(
-    #     args.model_name,
-    #     args.learning_rate,
-    #     args.weight_decay,
-    #     warmup_steps,
-    #     total_steps,
-    #     args.loss_func
-    # )
-    # # print(model)
+    dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
+                            args.test_path, args.predict_path)
+    total_steps = (9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.max_epoch
+    warmup_steps = int((9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.warm_up_ratio)
+    model = Model(
+        args.model_name,
+        args.learning_rate,
+        args.weight_decay,
+        warmup_steps,
+        total_steps,
+        args.loss_func
+    )
+    # print(model)
 
-    # # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
-    # trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1)
+    # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
+    trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1)
 
-    # # use Tuner to get optimized batch size
-    # # tuner = Tuner(trainer)
-    # # tuner.scale_batch_size(model=model, datamodule=dataloader, mode="binsearch")
+    # use Tuner to get optimized batch size
+    # tuner = Tuner(trainer)
+    # tuner.scale_batch_size(model=model, datamodule=dataloader, mode="binsearch")
 
-    # # Train part
-    # trainer.fit(model=model, datamodule=dataloader)
-    # trainer.test(model=model, datamodule=dataloader)
+    # Train part
+    trainer.fit(model=model, datamodule=dataloader)
+    trainer.test(model=model, datamodule=dataloader)
 
-    # # 학습이 완료된 모델을 저장합니다.
-    # torch.save(model, 'model.pt')
-=======
     # 학습이 완료된 모델을 저장합니다.
     torch.save(model, 'model.pt')
->>>>>>> efbd0348cea42f151de67c2ba91795a1f8cc15ac
