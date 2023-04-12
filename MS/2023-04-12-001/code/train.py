@@ -10,6 +10,8 @@ import torchmetrics
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.tuner import Tuner
+import numpy as np
+import random
 import wandb
 
 
@@ -221,8 +223,9 @@ if __name__ == '__main__':
     parser.add_argument('--predict_path', default='~/data/test.csv')
     parser.add_argument('--weight_decay', default=0.01)
     parser.add_argument('--warm_up_ratio', default=0.3)
-    parser.add_argument('--loss_func', default="MSE")
-    parser.add_argument('--run_name', default="roberta_large_001")
+    parser.add_argument('--loss_func', default="L1")
+    parser.add_argument('--run_name', default="_001")
+    parser.add_argument('--project_name', default="STS_roberta_large_001")
     args = parser.parse_args()
 
     sweep_config = {
@@ -232,19 +235,19 @@ if __name__ == '__main__':
                 'values':[1e-5, 2e-5, 3e-5, 5e-5]
             },
             'max_epoch':{
-                'values':[3, 4, 5]
+                'values':[4, 5, 6]
             },
             'batch_size':{
-                'values':[8, 16]
+                'values':[16]
             },
             'weight_decay':{
                 'values':[0., 0.01, 0.1]
             },
             'warm_up_ratio':{
-                'values':[0., 0.1, 0.2, 0.6]
+                'values':[0, 0.1, 0.2, 0.6]
             },
             'loss_func':{
-                'values':["MSE", "Huber"]
+                'values':["MSE", "Huber", "L1"]
             }
         },
         'metric': {
@@ -253,7 +256,7 @@ if __name__ == '__main__':
         }
     }
 
-
+    ### HP Tuning
     # Sweep을 통해 실행될 학습 코드를 작성합니다.
     def sweep_train(config=None):
         wandb.init(config=config)
@@ -261,63 +264,66 @@ if __name__ == '__main__':
 
         dataloader = Dataloader(args.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
                                 args.test_path, args.predict_path)
+        total_steps = (9324 // config.batch_size + (9324 % config.batch_size != 0)) * config.max_epoch
         warmup_steps = int((9324 // config.batch_size + (9324 % config.batch_size != 0)) * config.warm_up_ratio)
         model = Model(
             args.model_name,
             config.learning_rate,
             config.weight_decay,
             warmup_steps,
+            total_steps,
             config.loss_func
         )
-        wandb_logger = WandbLogger(project="sts-04-12-001")
+        wandb_logger = WandbLogger(project=args.project_name)
 
-        trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=config.max_epoch, logger=wandb_logger, log_every_n_steps=1, gradient_clip_val=1.)
+        trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=config.max_epoch, logger=wandb_logger, log_every_n_steps=1)
         trainer.fit(model=model, datamodule=dataloader)
         trainer.test(model=model, datamodule=dataloader)
     
     # Sweep 생성
 
-    # sweep_id = wandb.sweep(
-    #     sweep=sweep_config,     # config 딕셔너리를 추가합니다.
-    #     project='sts-04-12-001'  # project의 이름을 추가합니다.
-    # )
-    # wandb.agent(
-    #     sweep_id=sweep_id,      # sweep의 정보를 입력하고
-    #     function=sweep_train,   # train이라는 모델을 학습하는 코드를
-    #     count=40                 # 총 3회 실행해봅니다.
-    # )
-    
-    # wandb logger
-    wandb.init()
-    wandb.run.name = args.run_name
-    wandb_logger = WandbLogger(project="sts-004")
-
-    # dataloader와 model을 생성합니다.
-    dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
-                            args.test_path, args.predict_path)
-    total_steps = (9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.max_epoch
-    warmup_steps = int((9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.warm_up_ratio)
-    model = Model(
-        args.model_name,
-        args.learning_rate,
-        args.weight_decay,
-        warmup_steps,
-        total_steps,
-        args.loss_func
+    sweep_id = wandb.sweep(
+        sweep=sweep_config,     # config 딕셔너리를 추가합니다.
+        project=args.project_name  # project의 이름을 추가합니다.
     )
-    # print(model)
+    wandb.agent(
+        sweep_id=sweep_id,      # sweep의 정보를 입력하고
+        function=sweep_train,   # train이라는 모델을 학습하는 코드를
+        count=40                 # 총 3회 실행해봅니다.
+    )
+    ###
 
-    # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
-    trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1)
 
-    # use Tuner to get optimized batch size
-    # tuner = Tuner(trainer)
-    # tuner.scale_batch_size(model=model, datamodule=dataloader, mode="binsearch")
-
-    # Train part
-    trainer.fit(model=model, datamodule=dataloader)
-    trainer.test(model=model, datamodule=dataloader)
-    wandb.finish()
     
-    # 학습이 완료된 모델을 저장합니다.
-    torch.save(model, 'model.pt')
+    ### actual model train
+    # # wandb logger
+    # wandb_logger = WandbLogger(project=args.project_name, name=args.loss_func + args.run_name)
+
+    # # dataloader와 model을 생성합니다.
+    # dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
+    #                         args.test_path, args.predict_path)
+    # total_steps = (9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.max_epoch
+    # warmup_steps = int((9324 // args.batch_size + (9324 % args.batch_size != 0)) * args.warm_up_ratio)
+    # model = Model(
+    #     args.model_name,
+    #     args.learning_rate,
+    #     args.weight_decay,
+    #     warmup_steps,
+    #     total_steps,
+    #     args.loss_func
+    # )
+    # # print(model)
+
+    # # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
+    # trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1)
+
+    # # use Tuner to get optimized batch size
+    # # tuner = Tuner(trainer)
+    # # tuner.scale_batch_size(model=model, datamodule=dataloader, mode="binsearch")
+
+    # # Train part
+    # trainer.fit(model=model, datamodule=dataloader)
+    # trainer.test(model=model, datamodule=dataloader)
+
+    # # 학습이 완료된 모델을 저장합니다.
+    # torch.save(model, 'model.pt')
