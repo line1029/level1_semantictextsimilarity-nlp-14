@@ -9,8 +9,6 @@ import torch
 import torchmetrics
 import pytorch_lightning as pl
 
-from sklearn.model_selection import KFold
-
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, inputs, targets=[]):
@@ -28,23 +26,20 @@ class Dataset(torch.utils.data.Dataset):
     # 입력하는 개수만큼 데이터를 사용합니다
     def __len__(self):
         return len(self.inputs)
-    
 
-class KfoldDataloader(pl.LightningDataModule):
-    def __init__(self, model_name, batch_size, shuffle, k, split_seed, num_splits, train_path, dev_path, test_path, predict_path):
+
+class Dataloader(pl.LightningDataModule):
+    def __init__(self, model_name, batch_size, shuffle, train_path, dev_path, test_path, predict_path):
         super().__init__()
         self.model_name = model_name
         self.batch_size = batch_size
         self.shuffle = shuffle
-        self.k = k
-        self.split_seed = split_seed
-        self.num_splits = num_splits
 
         self.train_path = train_path
         self.dev_path = dev_path
         self.test_path = test_path
         self.predict_path = predict_path
-        
+
         self.train_dataset = None
         self.val_dataset = None
         self.test_dataset = None
@@ -62,7 +57,6 @@ class KfoldDataloader(pl.LightningDataModule):
             text = '[SEP]'.join([item[text_column] for text_column in self.text_columns])
             outputs = self.tokenizer(text, add_special_tokens=True, padding='max_length', truncation=True)
             data.append(outputs['input_ids'])
-
         return data
 
     def preprocessing(self, data):
@@ -81,35 +75,31 @@ class KfoldDataloader(pl.LightningDataModule):
 
     def setup(self, stage='fit'):
         if stage == 'fit':
-            # 데이터 준비
-            total_data = pd.read_csv(self.train_path)
-            total_inputs, total_targets = self.preprocessing(total_data)
-            total_dataset = Dataset(total_inputs, total_targets)
+            # 학습 데이터와 검증 데이터셋을 호출합니다
+            train_data = pd.read_csv(self.train_path)
+            val_data = pd.read_csv(self.dev_path)
 
-            # 데이터셋 num_splits 번 fold
-            kf = KFold(n_splits=self.num_splits, shuffle=self.shuffle, random_state=self.split_seed)
-            all_splits = [k for k in kf.split(total_data)]
+            # 학습데이터 준비
+            train_inputs, train_targets = self.preprocessing(train_data)
 
-            # k번째 fold 된 데이터셋의 index 선택
-            train_indexes, val_indexes = all_splits[self.k]
-            train_indexes, val_indexes = train_indexes.tolist(), val_indexes.tolist()
+            # 검증데이터 준비
+            val_inputs, val_targets = self.preprocessing(val_data)
 
-            # fold한 index에 따라 데이터셋 분할
-            self.train_dataset = [total_dataset[x] for x in train_indexes]
-            self.val_dataset = [total_dataset[x] for x in val_indexes]
-
+            # train 데이터만 shuffle을 적용해줍니다, 필요하다면 val, test 데이터에도 shuffle을 적용할 수 있습니다
+            self.train_dataset = Dataset(train_inputs, train_targets)
+            self.val_dataset = Dataset(val_inputs, val_targets)
         else:
             # 평가데이터 준비
             test_data = pd.read_csv(self.test_path)
             test_inputs, test_targets = self.preprocessing(test_data)
             self.test_dataset = Dataset(test_inputs, test_targets)
-            
+
             predict_data = pd.read_csv(self.predict_path)
             predict_inputs, predict_targets = self.preprocessing(predict_data)
             self.predict_dataset = Dataset(predict_inputs, [])
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle)
+        return torch.utils.data.DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=args.shuffle)
 
     def val_dataloader(self):
         return torch.utils.data.DataLoader(self.val_dataset, batch_size=self.batch_size)
@@ -119,7 +109,7 @@ class KfoldDataloader(pl.LightningDataModule):
 
     def predict_dataloader(self):
         return torch.utils.data.DataLoader(self.predict_dataset, batch_size=self.batch_size)
-    
+
 
 class Model(pl.LightningModule):
     def __init__(self, model_name, lr):
@@ -133,7 +123,7 @@ class Model(pl.LightningModule):
         self.plm = transformers.AutoModelForSequenceClassification.from_pretrained(
             pretrained_model_name_or_path=model_name, num_labels=1)
         # Loss 계산을 위해 사용될 L1Loss를 호출합니다.
-        self.loss_func = torch.nn.HuberLoss()
+        self.loss_func = torch.nn.L1Loss()
 
     def forward(self, x):
         x = self.plm(x)['logits']
@@ -173,8 +163,8 @@ class Model(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
         return optimizer
-    
-    
+
+
 if __name__ == '__main__':
     folder_path = '/opt/ml/level1_semantictextsimilarity-nlp-14/SH'
     # 하이퍼 파라미터 등 각종 설정값을 입력받습니다
@@ -187,43 +177,35 @@ if __name__ == '__main__':
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--k', default=1, type=int)
     parser.add_argument('--split_seed', default=970514, type=int)
-    parser.add_argument('--num_splits', default=5, type=int)
+    parser.add_argument('--num_split', default=5, type=int)
     parser.add_argument('--learning_rate', default=1e-5, type=float)
     parser.add_argument('--weight_decay', default=0.0, type=float)
+    parser.add_argument('--num_splits', default=5, type=int)
     parser.add_argument('--train_path', default=folder_path+'/data/train.csv')
     parser.add_argument('--dev_path', default=folder_path+'/data/dev.csv')
     parser.add_argument('--test_path', default=folder_path+'/data/dev.csv')
     parser.add_argument('--predict_path', default=folder_path+'/data/test.csv')
     args = parser.parse_args(args=[])
+    # dataloader와 model을 생성합니다.
+    dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
+                            args.test_path, args.predict_path)
 
-    model= Model(args.model_name, args.learning_rate)
-    
     # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     accelerator = 'gpu' if device == torch.device('cuda') else 'cpu'
     trainer = pl.Trainer(accelerator=accelerator, max_epochs=args.max_epoch, log_every_n_steps=1)
 
-    results = []
-    # nums_folds는 fold의 개수, k는 k번째 fold datamodule
-    for k in range(args.num_splits):
-        dataloader = KfoldDataloader(args.model_name, 
-                                 args.batch_size, 
-                                 args.shuffle, 
-                                 k,
-                                 args.split_seed,
-                                 args.num_splits,
-                                 args.train_path, 
-                                 args.dev_path, 
-                                 args.test_path, 
-                                 args.predict_path)
-        dataloader.prepare_data()
-        dataloader.setup()
+    # Inference part
+    # 저장된 모델로 예측을 진행합니다.
+    model = torch.load(folder_path + '/models/MS_230412_002_10fold_r002.pt')
+    predictions = trainer.predict(model=model, datamodule=dataloader)
 
-        trainer.fit(model=model, datamodule=dataloader)
-        score = trainer.test(model=model, datamodule=dataloader)
+    # 예측된 결과를 형식에 맞게 반올림하여 준비합니다.
+    predictions = list(round(float(i), 1) for i in torch.cat(predictions))
 
-        results.extend(score)
-
-    # 학습이 완료된 모델을 저장합니다.
-    model_name = f"./base_{args.num_splits}fold.pt"
-    torch.save(model, model_name)
+    # output 형식을 불러와서 예측된 결과로 바꿔주고, output.csv로 출력합니다.
+    sample_submission_filename = folder_path + '/data/sample_submission.csv'
+    output = pd.read_csv(sample_submission_filename)
+    output['target'] = predictions
+    output_filename = folder_path + '/outputs/output_MS_230412_002_10fold_r002.csv'
+    output.to_csv(output_filename, index=False)
