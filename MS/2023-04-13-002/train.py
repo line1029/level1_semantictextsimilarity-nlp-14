@@ -59,7 +59,7 @@ class Dataloader(pl.LightningDataModule):
         data = []
         for idx, item in tqdm(dataframe.iterrows(), desc='tokenizing', total=len(dataframe)):
             # 두 입력 문장을 [SEP] 토큰으로 이어붙여서 전처리합니다.
-            text = '[SEP]'.join([item[text_column] for text_column in self.text_columns])
+            text = item['source'] + '[SEP]'.join([item[text_column] for text_column in self.text_columns])
             outputs = self.tokenizer(text, add_special_tokens=True, padding='max_length', truncation=True)
             data.append(outputs['input_ids'])
         return data
@@ -214,10 +214,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', default="klue/roberta-large", type=str)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_epoch', default=1, type=int)
+    parser.add_argument('--max_epoch', default=8, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=1e-5, type=float)
-    parser.add_argument('--train_path', default='~/data/train_augmented.csv')
+    parser.add_argument('--train_path', default='~/data/train.csv')
     parser.add_argument('--dev_path', default='~/data/dev.csv')
     parser.add_argument('--test_path', default='~/data/dev.csv')
     parser.add_argument('--predict_path', default='~/data/test.csv')
@@ -225,7 +225,7 @@ if __name__ == '__main__':
     parser.add_argument('--warm_up_ratio', default=0.3)
     parser.add_argument('--loss_func', default="L1")
     parser.add_argument('--run_name', default="_001")
-    parser.add_argument('--project_name', default="STS_roberta_large_003")
+    parser.add_argument('--project_name', default="STS_roberta_large_04_13_002")
     parser.add_argument('--eda', default=True)
     args = parser.parse_args()
 
@@ -305,19 +305,19 @@ if __name__ == '__main__':
     # # dataloader와 model을 생성합니다.
     dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
                             args.test_path, args.predict_path)
-    # dataloader.setup()
-    # total_steps = (len(dataloader.train_dataloader())) * args.max_epoch
-    # warmup_steps = int(len(dataloader.train_dataloader()) * args.warm_up_ratio)
-    # model = Model(
-    #     args.model_name,
-    #     args.learning_rate,
-    #     args.weight_decay,
-    #     warmup_steps,
-    #     total_steps,
-    #     args.loss_func
-    # )
+    dataloader.setup()
+    total_steps = (len(dataloader.train_dataloader())) * args.max_epoch
+    warmup_steps = int(len(dataloader.train_dataloader()) * args.warm_up_ratio)
+    model = Model(
+        args.model_name,
+        args.learning_rate,
+        args.weight_decay,
+        warmup_steps,
+        total_steps,
+        args.loss_func
+    )
 
-    model = torch.load('model.pt')
+    # model = torch.load('model.pt')
 
     # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
     trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1, val_check_interval=100)
@@ -331,4 +331,4 @@ if __name__ == '__main__':
     trainer.test(model=model, datamodule=dataloader)
 
     # 학습이 완료된 모델을 저장합니다.
-    torch.save(model, 'model1.pt')
+    torch.save(model, 'model.pt')
