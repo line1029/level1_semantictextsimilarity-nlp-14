@@ -50,7 +50,7 @@ class Dataloader(pl.LightningDataModule):
         self.test_dataset = None
         self.predict_dataset = None
 
-        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_name, max_length=128)
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_name, max_length=160)
         self.target_columns = ['label']
         self.delete_columns = ['id']
         self.text_columns = ['sentence_1', 'sentence_2']
@@ -59,7 +59,7 @@ class Dataloader(pl.LightningDataModule):
         data = []
         for idx, item in tqdm(dataframe.iterrows(), desc='tokenizing', total=len(dataframe)):
             # 두 입력 문장을 [SEP] 토큰으로 이어붙여서 전처리합니다.
-            text = item['source'] + " " + '[SEP]'.join([item[text_column] for text_column in self.text_columns])
+            text = '[SEP]'.join([item[text_column] for text_column in self.text_columns])
             outputs = self.tokenizer(text, add_special_tokens=True, padding='max_length', truncation=True)
             data.append(outputs['input_ids'])
         return data
@@ -117,15 +117,23 @@ class Dataloader(pl.LightningDataModule):
 
 
 class Model(pl.LightningModule):
-    def __init__(self, model_name, lr, weight_decay, warmup_steps, total_steps, loss_func):
+    def __init__(
+            self,
+            model_name,
+            lr,
+            weight_decay,
+            # warmup_steps,
+            # total_steps,
+            loss_func
+        ):
         super().__init__()
         self.save_hyperparameters()
 
         self.model_name = model_name
         self.lr = lr
         self.weight_decay = weight_decay
-        self.warmup_steps = warmup_steps
-        self.total_steps = total_steps
+        # self.warmup_steps = warmup_steps
+        # self.total_steps = total_steps
 
         # 사용할 모델을 호출합니다.
         self.plm = transformers.AutoModelForSequenceClassification.from_pretrained(
@@ -176,23 +184,24 @@ class Model(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         # lr scheduler를 이용해 warm-up stage 추가
-        scheduler = transformers.get_linear_schedule_with_warmup(
-            optimizer=optimizer,
-            num_warmup_steps=self.warmup_steps,
-            num_training_steps = self.total_steps
-        )
-        return (
-            [optimizer],
-            [
-                {
-                    'scheduler': scheduler,
-                    'interval': 'step',
-                    'frequency': 1,
-                    'reduce_on_plateau': False,
-                    'monitor': 'val_loss',
-                }
-            ]
-        )
+        # scheduler = transformers.get_linear_schedule_with_warmup(
+        #     optimizer=optimizer,
+        #     num_warmup_steps=self.warmup_steps,
+        #     num_training_steps = self.total_steps
+        # )
+        # return (
+        #     [optimizer],
+        #     [
+        #         {
+        #             'scheduler': scheduler,
+        #             'interval': 'step',
+        #             'frequency': 1,
+        #             'reduce_on_plateau': False,
+        #             'monitor': 'val_loss',
+        #         }
+        #     ]
+        # )
+        return optimizer
 
 
 
@@ -212,20 +221,20 @@ if __name__ == '__main__':
     # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', default="klue/roberta-large", type=str)
+    parser.add_argument('--model_name', default="snunlp/KR-ELECTRA-discriminator", type=str)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_epoch', default=5, type=int)
+    parser.add_argument('--max_epoch', default=4, type=int)
     parser.add_argument('--shuffle', default=True)
-    parser.add_argument('--learning_rate', default=2e-5, type=float)
-    parser.add_argument('--train_path', default='~/data/train.csv')
+    parser.add_argument('--learning_rate', default=1e-5, type=float)
+    parser.add_argument('--train_path', default='~/data/train_resampled_swap.csv')
     parser.add_argument('--dev_path', default='~/data/dev.csv')
     parser.add_argument('--test_path', default='~/data/dev.csv')
     parser.add_argument('--predict_path', default='~/data/test.csv')
-    parser.add_argument('--weight_decay', default=0.)
-    parser.add_argument('--warm_up_ratio', default=0.6)
+    parser.add_argument('--weight_decay', default=0.01)
+    parser.add_argument('--warm_up_ratio', default=0.3)
     parser.add_argument('--loss_func', default="MSE")
-    parser.add_argument('--run_name', default="_001")
-    parser.add_argument('--project_name', default="STS_roberta_large_04_13_002")
+    parser.add_argument('--run_name', default="001")
+    parser.add_argument('--project_name', default="STS_resample_swap")
     parser.add_argument('--eda', default=True)
     args = parser.parse_args()
 
@@ -300,27 +309,27 @@ if __name__ == '__main__':
     
     ### actual model train
     # wandb logger
-    wandb_logger = WandbLogger(project=args.project_name, name=args.loss_func + args.run_name)
+    wandb_logger = WandbLogger(project=args.project_name, name=f"{args.model_name}_{args.loss_func}_{args.learning_rate}_wd{args.weight_decay}")
 
     # # dataloader와 model을 생성합니다.
     dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
                             args.test_path, args.predict_path)
-    dataloader.setup()
-    total_steps = (len(dataloader.train_dataloader())) * args.max_epoch
-    warmup_steps = int(len(dataloader.train_dataloader()) * args.warm_up_ratio)
+    # dataloader.setup()
+    # total_steps = (len(dataloader.train_dataloader())) * args.max_epoch
+    # warmup_steps = int(len(dataloader.train_dataloader()) * args.warm_up_ratio)
     model = Model(
         args.model_name,
         args.learning_rate,
         args.weight_decay,
-        warmup_steps,
-        total_steps,
+        # warmup_steps,
+        # total_steps,
         args.loss_func
     )
 
     # model = torch.load('model.pt')
 
     # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
-    trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1, val_check_interval=291)
+    trainer = pl.Trainer(precision="16-mixed", accelerator='gpu', max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1, val_check_interval=200)
 
     # use Tuner to get optimized batch size
     # tuner = Tuner(trainer)
