@@ -245,7 +245,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', default=0.01)
     parser.add_argument('--warm_up_ratio', default=0.3)
     parser.add_argument('--loss_func', default="L1")
-    parser.add_argument('--run_name', default="_002_reproduced")
+    parser.add_argument('--run_name', default="load_from_09147")
     parser.add_argument('--project_name', default="load_09103")
     args = parser.parse_args()
 
@@ -336,7 +336,7 @@ if __name__ == '__main__':
     #     args.loss_func
     # )
     # 체크포인트 불러오기
-    model = Model.load_from_checkpoint('./save/sota_stepLR.ckpt')
+    model = Model.load_from_checkpoint('./save/09147.ckpt')
 
     # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
     trainer = pl.Trainer(precision="16-mixed", accelerator='gpu',
