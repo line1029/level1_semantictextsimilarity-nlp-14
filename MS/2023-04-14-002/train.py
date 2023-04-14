@@ -212,6 +212,22 @@ class Model(pl.LightningModule):
         return [optimizer], [scheduler]
 
 
+class CustomModelCheckpoint(ModelCheckpoint):
+    def _should_skip_saving_checkpoint(self, trainer: "pl.Trainer") -> bool:
+        from pytorch_lightning.trainer.states import TrainerFn
+
+        return (
+            bool(trainer.fast_dev_run)  # disable checkpointing with fast_dev_run
+            or trainer.state.fn != TrainerFn.FITTING  # don't save anything during non-fit
+            or trainer.sanity_checking  # don't save anything during sanity check
+            or self._last_global_step_saved == trainer.global_step  # already saved at the last step
+            or self.current_score is None
+            or torch.isnan(self.current_score)
+            or torch.isinf(self.current_score)
+            or self.current_score < 0.925
+        )
+
+
 
 
 if __name__ == '__main__':
@@ -323,7 +339,7 @@ if __name__ == '__main__':
                         mode='max',
                         check_finite=False
                     ),
-                    ModelCheckpoint(
+                    CustomModelCheckpoint(
                         './save/',
                         '{epoch}-{step}-{val_pearson:.4f}',
                         monitor='val_pearson',
