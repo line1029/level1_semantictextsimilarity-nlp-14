@@ -10,6 +10,7 @@ import torchmetrics
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.tuner import Tuner
+from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
 import numpy as np
 import random
 import wandb
@@ -227,11 +228,11 @@ if __name__ == '__main__':
     # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', default="klue/roberta-large", type=str)
-    parser.add_argument('--batch_size', default=16, type=int)
+    parser.add_argument('--model_name', default="monologg/koelectra-base-v3-discriminator", type=str)
+    parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--max_epoch', default=6, type=int)
     parser.add_argument('--shuffle', default=True)
-    parser.add_argument('--learning_rate', default=1e-5, type=float)
+    parser.add_argument('--learning_rate', default=3e-5, type=float)
     parser.add_argument('--train_path', default='~/data/train_resampled_swap_v2.csv')
     parser.add_argument('--dev_path', default='~/data/dev.csv')
     parser.add_argument('--test_path', default='~/data/dev.csv')
@@ -240,7 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('--warm_up_ratio', default=0.3)
     parser.add_argument('--loss_func', default="MSE")
     parser.add_argument('--run_name', default="001")
-    parser.add_argument('--project_name', default="STS_resample_swap")
+    parser.add_argument('--project_name', default="STS_resample_swap_v2")
     parser.add_argument('--eda', default=True)
     args = parser.parse_args()
 
@@ -251,13 +252,13 @@ if __name__ == '__main__':
     #     'method': 'random', # random: 임의의 값의 parameter 세트를 선택
     #     'parameters': {
     #         'learning_rate':{
-    #             'values':[1e-5, 2e-5, 3e-5, 5e-5]
+    #             'values':[1e-5, 2e-5, 3e-5, 5e-5, 8e-6]
     #         },
     #         'max_epoch':{
     #             'values':[4, 5, 6]
     #         },
     #         'batch_size':{
-    #             'values':[16]
+    #             'values':[16, 32]
     #         },
     #         'weight_decay':{
     #             'values':[0., 0.01, 0.1]
@@ -281,8 +282,6 @@ if __name__ == '__main__':
 
     #     dataloader = Dataloader(args.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
     #                             args.test_path, args.predict_path)
-    #     total_steps = (9324 // config.batch_size + (9324 % config.batch_size != 0)) * config.max_epoch
-    #     warmup_steps = int((9324 // config.batch_size + (9324 % config.batch_size != 0)) * config.warm_up_ratio)
     #     model = Model(
     #         args.model_name,
     #         config.learning_rate,
@@ -317,7 +316,7 @@ if __name__ == '__main__':
     # wandb logger
     wandb_logger = WandbLogger(
         project=args.project_name,
-        name=f"{args.model_name}_{args.loss_func}_{args.learning_rate}_bs{args.batch_size}_steplr"
+        name=f"{args.model_name}_{args.loss_func}_{args.learning_rate}_{args.batch_size}_{args.weight_decay}_steplr"
     )
 
     # # dataloader와 model을 생성합니다.
@@ -326,26 +325,42 @@ if __name__ == '__main__':
     # dataloader.setup()
     # total_steps = (len(dataloader.train_dataloader())) * args.max_epoch
     # warmup_steps = int(len(dataloader.train_dataloader()) * args.warm_up_ratio)
-    # model = Model(
-    #     args.model_name,
-    #     args.learning_rate,
-    #     args.weight_decay,
-    #     # warmup_steps,
-    #     # total_steps,
-    #     args.loss_func
-    # )
+    model = Model(
+        args.model_name,
+        args.learning_rate,
+        args.weight_decay,
+        # warmup_steps,
+        # total_steps,
+        args.loss_func
+    )
 
-    model = torch.load('model.pt')
+    # model = torch.load('model.pt')
 
     # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
     trainer = pl.Trainer(
-        # precision="16-mixed",
+        precision="16-mixed",
         accelerator='gpu',
-        # max_epochs=args.max_epoch,
-        # logger=wandb_logger,
-        # log_every_n_steps=1,
-        # val_check_interval=0.33,
-        # check_val_every_n_epoch=1
+        max_epochs=args.max_epoch,
+        logger=wandb_logger,
+        log_every_n_steps=1,
+        val_check_interval=0.25,
+        check_val_every_n_epoch=1,
+        callbacks=[
+            LearningRateMonitor(logging_interval='step'),
+            EarlyStopping(
+                'val_pearson',
+                patience=4,
+                mode='max',
+                check_finite=True
+            ),
+            ModelCheckpoint(
+                './save/',
+                '{epoch}-{step}-{val_pearson:.4f}',
+                monitor='val_pearson',
+                save_top_k=2,
+                mode='max'
+            )
+        ]
     )
 
     # use Tuner to get optimized batch size
@@ -353,7 +368,7 @@ if __name__ == '__main__':
     # tuner.scale_batch_size(model=model, datamodule=dataloader, mode="binsearch")
 
     # Train part
-    # trainer.fit(model=model, datamodule=dataloader)
+    trainer.fit(model=model, datamodule=dataloader)
     trainer.test(model=model, datamodule=dataloader)
 
     # 학습이 완료된 모델을 저장합니다.
