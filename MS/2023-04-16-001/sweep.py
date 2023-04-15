@@ -30,7 +30,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_epoch', default=6, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=2e-5, type=float)
-    parser.add_argument('--train_path', default='~/data/train_resampled_swap_v2.csv')
+    parser.add_argument('--train_path', default='~/data/train_sentence_swap.csv')
     parser.add_argument('--dev_path', default='~/data/dev.csv')
     parser.add_argument('--test_path', default='~/data/dev.csv')
     parser.add_argument('--predict_path', default='~/data/test.csv')
@@ -49,7 +49,7 @@ if __name__ == '__main__':
         'method': 'random', # random: 임의의 값의 parameter 세트를 선택
         'parameters': {
             'learning_rate':{
-                'values':[1e-5, 2e-5, 3e-5, 5e-5, 5e-6]
+                'values':[1e-5, 2e-5, 3e-5, 5e-5]
             },
             'max_epoch':{
                 'values':[6]
@@ -101,7 +101,7 @@ if __name__ == '__main__':
             )
             dataloader = ResampledDataloader(config.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
                                     args.test_path, args.predict_path)
-            warmup_steps = int((15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.warm_up_ratio)
+            # warmup_steps = int((15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.warm_up_ratio)
             model = Model(
                 config.model_name,
                 config.learning_rate,

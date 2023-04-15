@@ -14,6 +14,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping, Mode
 import numpy as np
 import random
 import wandb
+from itertools import chain
 from seed import *
 
 
@@ -122,19 +123,18 @@ class ResampledDataloader(Dataloader):
     def setup(self, stage='fit'):
         if stage == 'fit':
             # 학습 데이터와 검증 데이터셋을 호출합니다
-            tmp = pd.read_csv(self.train_path)
+            train_data = pd.read_csv(self.train_path)
             val_data = pd.read_csv(self.dev_path)
-            train_data = pd.concat([tmp[tmp.label==(i/10)].sample(600, replace=True) for i in range(0, 51, 2)] +\
-                                   [tmp[tmp.label==(i/10)].sample(60, replace=True) for i in range(5, 46, 10)])
+            
 
             # 학습데이터 준비
-            train_inputs, train_targets = self.preprocessing(train_data)
+            self.train_inputs, self.train_targets = self.preprocessing(train_data)
 
             # 검증데이터 준비
             val_inputs, val_targets = self.preprocessing(val_data)
 
             # train 데이터만 shuffle을 적용해줍니다, 필요하다면 val, test 데이터에도 shuffle을 적용할 수 있습니다
-            self.train_dataset = Dataset(train_inputs, train_targets)
+            # self.train_dataset = Dataset(train_inputs, train_targets)
             self.val_dataset = Dataset(val_inputs, val_targets)
         else:
             # 평가데이터 준비
@@ -145,6 +145,14 @@ class ResampledDataloader(Dataloader):
             predict_data = pd.read_csv(self.predict_path)
             predict_inputs, predict_targets = self.preprocessing(predict_data)
             self.predict_dataset = Dataset(predict_inputs, [])
+    
+    def train_dataloader(self):
+        tmp = pd.DataFrame({'data':self.train_inputs, 'label':list(chain.from_iterable(self.train_targets))})
+        
+        train_data = pd.concat([tmp[tmp.label==i/10].sample(600, replace=True) for i in range(0, 51, 2)] +\
+                               [tmp[tmp.label==i/10].sample(60, replace=True) for i in range(5, 46, 10)])
+        self.train_dataset = Dataset(train_data.data.tolist(), [[i] for i in train_data.label])
+        return torch.utils.data.DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle)
 
 
 class Model(pl.LightningModule):
@@ -257,8 +265,7 @@ class CustomModelCheckpoint(ModelCheckpoint):
 
 if __name__ == '__main__':
     # seed
-    # seed = get_seed()
-    seed = [4097916284,2652554856,845994945,838387551,2493438788,842948080]
+    seed = get_seed()
     set_seed(*seed)
     # torch.manual_seed(seed)
     # torch.cuda.manual_seed(seed)
