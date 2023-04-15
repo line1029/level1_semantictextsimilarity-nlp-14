@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--warm_up_ratio', default=0.3)
     parser.add_argument('--loss_func', default="MSE")
     parser.add_argument('--run_name', default="001")
-    parser.add_argument('--project_name', default="STS_snunlp_resampled_sweep")
+    parser.add_argument('--project_name', default="STS_klue_rl_resampled_sweep")
     parser.add_argument('--eda', default=True)
     args = parser.parse_args()
 
@@ -49,21 +49,21 @@ if __name__ == '__main__':
         'method': 'random', # random: 임의의 값의 parameter 세트를 선택
         'parameters': {
             'learning_rate':{
-                'values':[1e-5, 2e-5, 3e-5, 5e-5]
+                'values':[1e-5, 2e-5, 3e-5, 8e-6]
             },
             'max_epoch':{
                 'values':[6]
             },
             'batch_size':{
-                'values':[8, 16, 32, 48]
+                'values':[8, 16]
             },
             'model_name':{
                 'values':[
-                    # 'klue/roberta-large',
+                    'klue/roberta-large',
                     # 'monologg/koelectra-base-v3-discriminator',
                     # 'beomi/KcELECTRA-base',
                     # 'rurupang/roberta-base-finetuned-sts',
-                    'snunlp/KR-ELECTRA-discriminator'
+                    # 'snunlp/KR-ELECTRA-discriminator'
                 ]
             },
             # 'warm_up_ratio':{
@@ -130,7 +130,7 @@ if __name__ == '__main__':
                     ),
                     CustomModelCheckpoint(
                         './save/',
-                        f'snunlp_{next(ver):0>4}_{{val_pearson:.4f}}',
+                        f'klue_rl_{next(ver):0>4}_{{val_pearson:.4f}}',
                         monitor='val_pearson',
                         save_top_k=1,
                         mode='max'
