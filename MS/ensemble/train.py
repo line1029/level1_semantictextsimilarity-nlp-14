@@ -124,7 +124,7 @@ class Model(pl.LightningModule):
             model_name,
             lr,
             weight_decay,
-            warmup_steps,
+            # warmup_steps,
             # total_steps,
             loss_func
         ):
@@ -134,7 +134,7 @@ class Model(pl.LightningModule):
         self.model_name = model_name
         self.lr = lr
         self.weight_decay = weight_decay
-        self.warmup_steps = warmup_steps
+        # self.warmup_steps = warmup_steps
         # self.total_steps = total_steps
 
         # 사용할 모델을 호출합니다.

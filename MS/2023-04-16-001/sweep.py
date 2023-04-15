@@ -15,7 +15,7 @@ import numpy as np
 import random
 import wandb
 from seed import *
-from train import Dataset, Dataloader, Model, CustomModelCheckpoint
+from train import Dataset, Dataloader, Model, CustomModelCheckpoint, ResampledDataloader
 
 
 
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--warm_up_ratio', default=0.3)
     parser.add_argument('--loss_func', default="MSE")
     parser.add_argument('--run_name', default="001")
-    parser.add_argument('--project_name', default="STS_roberta-large_sweep")
+    parser.add_argument('--project_name', default="STS_snunlp_resampled_sweep")
     parser.add_argument('--eda', default=True)
     args = parser.parse_args()
 
@@ -49,31 +49,31 @@ if __name__ == '__main__':
         'method': 'random', # random: 임의의 값의 parameter 세트를 선택
         'parameters': {
             'learning_rate':{
-                'values':[1e-5, 2e-5, 3e-5]
+                'values':[1e-5, 2e-5, 3e-5, 5e-5, 5e-6]
             },
             'max_epoch':{
                 'values':[6]
             },
             'batch_size':{
-                'values':[8, 16]
+                'values':[8, 16, 32, 48]
             },
             'model_name':{
                 'values':[
-                    'klue/roberta-large',
+                    # 'klue/roberta-large',
                     # 'monologg/koelectra-base-v3-discriminator',
                     # 'beomi/KcELECTRA-base',
                     # 'rurupang/roberta-base-finetuned-sts',
-                    # 'snunlp/KR-ELECTRA-discriminator'
+                    'snunlp/KR-ELECTRA-discriminator'
                 ]
             },
-            'warm_up_ratio':{
-                'values':[0.3, 0.1, 0.2, 0.6]
-            },
+            # 'warm_up_ratio':{
+            #     'values':[0.3, 0.1, 0.2, 0.6]
+            # },
             'weight_decay':{
-                'values':[0, 0.01]
+                'values':[0, 0.01, 0.05]
             },
             'loss_func':{
-                'values':["L1"]
+                'values':["MSE", "Huber", "L1"]
             }
         },
         'metric': {
@@ -97,17 +97,16 @@ if __name__ == '__main__':
             run.name = f"{config.loss_func}_{config.learning_rate}_{config.batch_size}_{config.weight_decay}_{config.max_epoch}_steplr_seed:{'_'.join(map(str,seed))}"
             
             wandb_logger = WandbLogger(
-                project=args.project_name,
-                name=f"{config.model_name}_{config.loss_func}_{config.learning_rate}_{config.batch_size}_{config.weight_decay}_{config.max_epoch}_{config.weight_decay}_invsqrtlr"
+                project=args.project_name
             )
-            dataloader = Dataloader(config.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
+            dataloader = ResampledDataloader(config.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
                                     args.test_path, args.predict_path)
-            warmup_steps = int((17280 // config.batch_size + (17280 % config.batch_size != 0)) * config.warm_up_ratio)
+            warmup_steps = int((15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.warm_up_ratio)
             model = Model(
                 config.model_name,
                 config.learning_rate,
                 config.weight_decay,
-                warmup_steps,
+                # warmup_steps,
                 # total_steps,
                 config.loss_func
             )
@@ -115,6 +114,7 @@ if __name__ == '__main__':
             trainer = pl.Trainer(
                 precision="16-mixed",
                 accelerator='gpu',
+                reload_dataloaders_every_n_epochs=1,
                 max_epochs=config.max_epoch,
                 logger=wandb_logger,
                 log_every_n_steps=1,
@@ -130,7 +130,7 @@ if __name__ == '__main__':
                     ),
                     CustomModelCheckpoint(
                         './save/',
-                        f'roberta-large_{next(ver):0>4}_{{val_pearson:.4f}}',
+                        f'snunlp_{next(ver):0>4}_{{val_pearson:.4f}}',
                         monitor='val_pearson',
                         save_top_k=1,
                         mode='max'

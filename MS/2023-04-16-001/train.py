@@ -118,13 +118,42 @@ class Dataloader(pl.LightningDataModule):
         return torch.utils.data.DataLoader(self.predict_dataset, batch_size=self.batch_size)
 
 
+class ResampledDataloader(Dataloader):
+    def setup(self, stage='fit'):
+        if stage == 'fit':
+            # 학습 데이터와 검증 데이터셋을 호출합니다
+            tmp = pd.read_csv(self.train_path)
+            val_data = pd.read_csv(self.dev_path)
+            train_data = pd.concat([tmp[tmp.label==(i/10)].sample(600, replace=True) for i in range(0, 51, 2)] +\
+                                   [tmp[tmp.label==(i/10)].sample(60, replace=True) for i in range(5, 46, 10)])
+
+            # 학습데이터 준비
+            train_inputs, train_targets = self.preprocessing(train_data)
+
+            # 검증데이터 준비
+            val_inputs, val_targets = self.preprocessing(val_data)
+
+            # train 데이터만 shuffle을 적용해줍니다, 필요하다면 val, test 데이터에도 shuffle을 적용할 수 있습니다
+            self.train_dataset = Dataset(train_inputs, train_targets)
+            self.val_dataset = Dataset(val_inputs, val_targets)
+        else:
+            # 평가데이터 준비
+            test_data = pd.read_csv(self.test_path)
+            test_inputs, test_targets = self.preprocessing(test_data)
+            self.test_dataset = Dataset(test_inputs, test_targets)
+
+            predict_data = pd.read_csv(self.predict_path)
+            predict_inputs, predict_targets = self.preprocessing(predict_data)
+            self.predict_dataset = Dataset(predict_inputs, [])
+
+
 class Model(pl.LightningModule):
     def __init__(
             self,
             model_name,
             lr,
             weight_decay,
-            warmup_steps,
+            # warmup_steps,
             # total_steps,
             loss_func
         ):
@@ -134,7 +163,7 @@ class Model(pl.LightningModule):
         self.model_name = model_name
         self.lr = lr
         self.weight_decay = weight_decay
-        self.warmup_steps = warmup_steps
+        # self.warmup_steps = warmup_steps
         # self.total_steps = total_steps
 
         # 사용할 모델을 호출합니다.
@@ -288,6 +317,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer(
         precision="16-mixed",
         accelerator='gpu',
+        reload_dataloaders_every_n_epochs=1,
         max_epochs=args.max_epoch,
         logger=wandb_logger,
         log_every_n_steps=1,
