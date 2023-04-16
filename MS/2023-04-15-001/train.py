@@ -244,7 +244,7 @@ if __name__ == '__main__':
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', default="snunlp/KR-ELECTRA-discriminator", type=str)
-    parser.add_argument('--batch_size', default=16, type=int)
+    parser.add_argument('--batch_size', default=8, type=int)
     parser.add_argument('--max_epoch', default=10, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=2e-5, type=float)

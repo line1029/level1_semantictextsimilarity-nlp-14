@@ -22,7 +22,7 @@ if __name__ == '__main__':
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', default='snunlp/KR-ELECTRA-discriminator', type=str)
-    parser.add_argument('--model_path', default='./save/snunlp_0020_val_pearson=0.9315.ckpt', type=str)
+    parser.add_argument('--model_path', default='./save/snunlp_0016_val_pearson=0.9312.ckpt', type=str)
     parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--max_epoch', default=6, type=int)
     parser.add_argument('--shuffle', default=True)
@@ -57,4 +57,4 @@ if __name__ == '__main__':
     # output 형식을 불러와서 예측된 결과로 바꿔주고, output.csv로 출력합니다.
     output = pd.read_csv('~/data/sample_submission.csv')
     output['target'] = predictions
-    output.to_csv(f'output.csv', index=False)
+    output.to_csv(f'output3.csv', index=False)
