@@ -227,25 +227,25 @@ class Model(pl.LightningModule):
             lr=self.lr,
             weight_decay=self.weight_decay
         )
-        # scheduler = torch.optim.lr_scheduler.StepLR(
-        #     optimizer, step_size=1, gamma=0.9)
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer, step_size=1, gamma=0.96)
         # lr scheduler를 이용해 warm-up stage 추가
-        scheduler = transformers.get_inverse_sqrt_schedule(
-            optimizer=optimizer,
-            num_warmup_steps=self.warmup_steps
-        )
-        return (
-            [optimizer],
-            [
-                {
-                    'scheduler': scheduler,
-                    'interval': 'step',
-                    'frequency': 1,
-                    'reduce_on_plateau': False,
-                    'monitor': 'val_loss',
-                }
-            ]
-        )
+        # scheduler = transformers.get_inverse_sqrt_schedule(
+        #     optimizer=optimizer,
+        #     num_warmup_steps=self.warmup_steps
+        # )
+        # return (
+        #     [optimizer],
+        #     [
+        #         {
+        #             'scheduler': scheduler,
+        #             'interval': 'step',
+        #             'frequency': 1,
+        #             'reduce_on_plateau': False,
+        #             'monitor': 'val_loss',
+        #         }
+        #     ]
+        # )
         return [optimizer], [scheduler]
 
 
