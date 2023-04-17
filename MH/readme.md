@@ -14,4 +14,4 @@ snunlp/koelectra-d, AdamW,	inversesqrtLR,	batch_size=32	epoch=10	lr=2e-05	warmup
 ### 17-002
 snunlp/koelectra-d, AdamW,	inversesqrtLR,	batch_size=16	epoch=10	lr=2e-05	warmup_ratio=0.30	decay=0.01	loss=L1
 -> Val DT 기준 0.8106
--> batch_size는 32가 
+-> batch_size는 32가 효율적인 
