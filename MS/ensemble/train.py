@@ -278,8 +278,10 @@ class CustomModelCheckpoint(ModelCheckpoint):
         if not self._should_skip_saving_checkpoint(trainer) and not self._should_save_on_train_epoch_end(trainer):
             monitor_candidates = self._monitor_candidates(trainer)
             current = monitor_candidates.get(self.monitor)
-            if torch.isnan(current) or current < 0.927:
+            ### added
+            if torch.isnan(current) or current < 0.93:
                 return
+            ###
             if self._every_n_epochs >= 1 and (trainer.current_epoch + 1) % self._every_n_epochs == 0:
                 self._save_topk_checkpoint(trainer, monitor_candidates)
             self._save_last_checkpoint(trainer, monitor_candidates)

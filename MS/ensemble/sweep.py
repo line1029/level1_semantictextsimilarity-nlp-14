@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--warm_up_ratio', default=0.3)
     parser.add_argument('--loss_func', default="MSE")
     parser.add_argument('--run_name', default="001")
-    parser.add_argument('--project_name', default="STS_klue_rl_resampled_sweep")
+    parser.add_argument('--project_name', default="STS_klue_rl_resampled_sweep_L1_MS")
     parser.add_argument('--eda', default=True)
     args = parser.parse_args()
 
@@ -66,9 +66,9 @@ if __name__ == '__main__':
                     # 'snunlp/KR-ELECTRA-discriminator'
                 ]
             },
-            'warm_up_ratio':{
-                'values':[0.3, 0.45, 0.6]
-            },
+            # 'warm_up_ratio':{
+            #     'values':[0.3, 0.45, 0.6]
+            # },
             'weight_decay':{
                 'values':[0, 0.01]
             },
@@ -101,12 +101,12 @@ if __name__ == '__main__':
             )
             dataloader = ResampledDataloader(config.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
                                     args.test_path, args.predict_path)
-            warmup_steps = int((15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.warm_up_ratio)
+            # warmup_steps = int((15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.warm_up_ratio)
             model = Model(
                 config.model_name,
                 config.learning_rate,
                 config.weight_decay,
-                warmup_steps,
+                # warmup_steps,
                 # total_steps,
                 config.loss_func
             )

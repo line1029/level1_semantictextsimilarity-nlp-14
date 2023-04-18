@@ -126,14 +126,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--max_epoch', default=20, type=int)
-    parser.add_argument('--input_size', default=8, type=int)
+    parser.add_argument('--input_size', default=12, type=int)
     parser.add_argument('--hidden_size', default=64, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=1e-4, type=float)
-    parser.add_argument('--train_path', default='~/data/dev_pred.csv')
-    parser.add_argument('--dev_path', default='~/data/dev_pred.csv')
-    parser.add_argument('--test_path', default='~/data/dev_pred.csv')
-    parser.add_argument('--predict_path', default='~/data/test_pred.csv')
+    parser.add_argument('--train_path', default='~/data/dev_pred_input_size_12.csv')
+    parser.add_argument('--dev_path', default='~/data/dev_pred_input_size_12.csv')
+    parser.add_argument('--test_path', default='~/data/dev_pred_input_size_12.csv')
+    parser.add_argument('--predict_path', default='~/data/test_pred_input_size_12.csv')
     parser.add_argument('--loss_func', default="MSE")
     args = parser.parse_args()
 
@@ -144,6 +144,11 @@ if __name__ == '__main__':
 
     # dataloader와 model을 생성합니다.
     # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
+    wandb_logger = WandbLogger(
+        project='STS-Ensemble2',
+        name=f'Blending_lr_{args.input_size}:{args.learning_rate}_hs:{args.hidden_size}_bs:{args.batch_size}_epoch_20_seed:{"_".join(map(str, seed))}',
+        entity='boostcamp-sts-14'
+    )
     trainer = pl.Trainer(
         accelerator="gpu",
         max_epochs=20,
@@ -180,11 +185,6 @@ if __name__ == '__main__':
         args.loss_func,
         args.batch_size
     )
-    wandb_logger = WandbLogger(
-        project='STS-Ensemble2',
-        name=f'Blending_lr:{args.learning_rate}_hs:{args.hidden_size}_bs:{args.batch_size}_epoch_20',
-        entity='boostcamp-sts-14'
-    )
 
 
     trainer.fit(model=model)
@@ -193,7 +193,7 @@ if __name__ == '__main__':
     predictions = trainer.predict(model=model)
 
     # 예측된 결과를 형식에 맞게 반올림하여 준비합니다.
-    predictions = list(float(i) for i in torch.cat(predictions))
+    predictions = list(round(float(i), 1) for i in torch.cat(predictions))
 
     # output 형식을 불러와서 예측된 결과로 바꿔주고, output.csv로 출력합니다.
     output = pd.read_csv('~/data/sample_submission.csv')

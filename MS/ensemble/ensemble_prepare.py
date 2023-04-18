@@ -39,11 +39,16 @@ if __name__ == '__main__':
     parser.add_argument('--loss_func', default="MSE")
     args = parser.parse_args()
 
-    candidates = ['klue_rl_L1_0005_val_pearson=0.9341.pt', 'klue_rl_MSE_0001_val_pearson=0.9274.pt',
-                  'klue_rl_L1_001_9288.pt', 'klue_rl_MSE_0007_val_pearson=0.9335.pt',
-                  'snunlp_0004_val_pearson=0.9340.pt', 'snunlp_0015_val_pearson=0.9314.pt',
-                  'snunlp_0011_val_pearson=0.9312.pt', 'snunlp_MSE_001_val_pearson=0.9316.pt']
-    
+    # candidates = ['klue_rl_L1_0005_val_pearson=0.9341.pt', 'klue_rl_MSE_0001_val_pearson=0.9274.pt',
+    #               'klue_rl_L1_001_9288.pt', 'klue_rl_MSE_0007_val_pearson=0.9335.pt',
+    #               'snunlp_0004_val_pearson=0.9340.pt', 'snunlp_0015_val_pearson=0.9314.pt',
+    #               'snunlp_0011_val_pearson=0.9312.pt', 'snunlp_MSE_001_val_pearson=0.9316.pt']
+    candidates = [
+        'klue_rl_L1_0004_val_pearson=0.9314.pt', 'klue_rl_MSE_0001_val_pearson=0.9311.pt',
+        'snunlp_0006_val_pearson=0.9309.pt', 'snunlp_0016_val_pearson=0.9312.pt'
+    ]
+
+
     dev_pred = []
     test_pred = []
     for model_path in candidates:
@@ -69,7 +74,7 @@ if __name__ == '__main__':
     dev_pred = torch.stack(dev_pred).transpose(0, 1)
     test_pred = torch.stack(test_pred).transpose(0, 1)
     dev = pd.DataFrame(dev_pred, columns=candidates)
-    dev['label'] = pd.read_csv(args.dev_path)['label']
-    dev.to_csv('dev_pred.csv', index=False)
+    # dev['label'] = pd.read_csv(args.dev_path)['label']
+    dev.to_csv('dev_pred_add4.csv', index=False)
     test = pd.DataFrame(test_pred, columns=candidates)
-    test.to_csv('test_pred.csv', index=False)
+    test.to_csv('test_pred_add4.csv', index=False)

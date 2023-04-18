@@ -37,7 +37,9 @@ if __name__ == "__main__":
     parser.add_argument('--warm_up_ratio', default=0.3)
     parser.add_argument('--loss_func', default="MSE")
     args = parser.parse_args()
-    candidates_paths = ['klue_rl_0001_val_pearson=0.9274.ckpt',  'klue_rl_0005_val_pearson=0.9341.ckpt',  'klue_rl_0007_val_pearson=0.9335.ckpt']
+    candidates_paths = [
+        'snunlp_0016_val_pearson=0.9312.ckpt'
+    ]
     for path in candidates_paths:
         if 'klue' in path:
             model_name = 'klue/roberta-large'
