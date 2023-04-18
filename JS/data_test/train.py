@@ -8,11 +8,11 @@ import transformers
 import torch
 import torchmetrics
 import pytorch_lightning as pl
+
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.tuner import Tuner
-import numpy as np
-import random
 import wandb
+import random
+import numpy as np
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -51,7 +51,7 @@ class Dataloader(pl.LightningDataModule):
         self.predict_dataset = None
 
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-            model_name, max_length=128)
+            model_name, max_length=160)
         self.target_columns = ['label']
         self.delete_columns = ['id']
         self.text_columns = ['sentence_1', 'sentence_2']
@@ -87,12 +87,6 @@ class Dataloader(pl.LightningDataModule):
             train_data = pd.read_csv(self.train_path)
             val_data = pd.read_csv(self.dev_path)
 
-            # 라벨이 0인 데이터를 1000개만 사용합니다.
-            train_data_label_0 = train_data[train_data['label'] == 0].sample(
-                n=1000)
-            train_data_label_n = train_data[train_data['label'] != 0]
-            train_data = pd.concat([train_data_label_0, train_data_label_n])
-
             # 학습데이터 준비
             train_inputs, train_targets = self.preprocessing(train_data)
 
@@ -126,24 +120,18 @@ class Dataloader(pl.LightningDataModule):
 
 
 class Model(pl.LightningModule):
-    def __init__(self, model_name, lr, weight_decay, loss_func):
+    def __init__(self, model_name, lr):
         super().__init__()
         self.save_hyperparameters()
 
         self.model_name = model_name
         self.lr = lr
-        self.weight_decay = weight_decay
 
         # 사용할 모델을 호출합니다.
         self.plm = transformers.AutoModelForSequenceClassification.from_pretrained(
             pretrained_model_name_or_path=model_name, num_labels=1)
-        # Loss 계산을 위해 사용될 손실함수를 호출합니다.
-        if loss_func == "MSE":
-            self.loss_func = torch.nn.MSELoss()
-        elif loss_func == "L1":
-            self.loss_func = torch.nn.L1Loss()
-        elif loss_func == "Huber":
-            self.loss_func = torch.nn.HuberLoss()
+        # Loss 계산을 위해 사용될 L1Loss를 호출합니다.
+        self.loss_func = torch.nn.L1Loss()
 
     def forward(self, x):
         x = self.plm(x)['logits']
@@ -164,10 +152,7 @@ class Model(pl.LightningModule):
         logits = self(x)
         loss = self.loss_func(logits, y.float())
         self.log("val_loss", loss)
-
         self.log("val_pearson", torchmetrics.functional.pearson_corrcoef(
-            logits.squeeze(), y.squeeze()))
-        self.log("val_cosine_similarity", torchmetrics.functional.cosine_similarity(
             logits.squeeze(), y.squeeze()))
 
         return loss
@@ -178,8 +163,6 @@ class Model(pl.LightningModule):
 
         self.log("test_pearson", torchmetrics.functional.pearson_corrcoef(
             logits.squeeze(), y.squeeze()))
-        self.log("test_cosine_similarity", torchmetrics.functional.cosine_similarity(
-            logits.squeeze(), y.squeeze()))
 
     def predict_step(self, batch, batch_idx):
         x = batch
@@ -189,15 +172,15 @@ class Model(pl.LightningModule):
 
     def configure_optimizers(self):
         self.optimizer = torch.optim.AdamW(
-            self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            self.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.StepLR(
-            self.optimizer, step_size=1, gamma=0.9)
+            self.optimizer, step_size=1, gamma=0.7)
         return [self.optimizer], [scheduler]
 
 
 if __name__ == '__main__':
-    # seed
-    seed = 42
+    # seed setting
+    seed = 1234
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)  # if use multi-GPU
@@ -205,54 +188,45 @@ if __name__ == '__main__':
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
     random.seed(seed)
-    pl.seed_everything(seed, workers=True)
+    pl.seed_everything(seed)
     # 하이퍼 파라미터 등 각종 설정값을 입력받습니다
     # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', default="klue/roberta-large", type=str)
+    parser.add_argument('--model_name', default='klue/roberta-small', type=str)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_epoch', default=6, type=int)
+    parser.add_argument('--max_epoch', default=10, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=1e-5, type=float)
-    # parser.add_argument('--train_path', default='~/data/train.csv')
     parser.add_argument(
-        '--train_path', default='~/data/train_resampled_swap.csv')
+        '--train_path', default='~/data/train_sentence_swap.csv')
     parser.add_argument('--dev_path', default='~/data/dev.csv')
     parser.add_argument('--test_path', default='~/data/dev.csv')
     parser.add_argument('--predict_path', default='~/data/test.csv')
-    parser.add_argument('--weight_decay', default=0.01)
-    parser.add_argument('--warm_up_ratio', default=0.3)
-    parser.add_argument('--loss_func', default="L1")
-    parser.add_argument('--run_name', default="_add_cosine_similarity")
-    parser.add_argument('--project_name', default="STS_roberta_large")
+
+    parser.add_argument('--weight_decay', default=0.01, type=float)
+    parser.add_argument('--loss_func', default='L1')
+    parser.add_argument('--run_name', default='001')
+    parser.add_argument('--project_name', default='klue-roberta-small_JS')
+
+    # args = parser.parse_args(args=[])
     args = parser.parse_args()
 
-    # actual model train
-    # wandb logger
+    wandb.init(project=args.project_name,
+               entity="boostcamp-sts-14",
+               name=f"{args.loss_func}_{args.learning_rate}_{args.batch_size}_{args.weight_decay}_{args.max_epoch}")
+    config = wandb.config
+
+    # dataloader와 model을 생성합니다.
+    dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle,
+                            args.train_path, args.dev_path, args.test_path, args.predict_path)
+    model = Model(args.model_name, args.learning_rate)
+
+    # wandb 로그 설정
     wandb_logger = WandbLogger(
-        project=args.project_name, name=args.loss_func + args.run_name)
-
-    # # dataloader와 model을 생성합니다.
-    dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
-                            args.test_path, args.predict_path)
-    model = Model(
-        args.model_name,
-        args.learning_rate,
-        args.weight_decay,
-        args.loss_func
-    )
-    # print(model)
-
-    # 모델 불러오기
-    # model = Model.load_from_checkpoint(
-    #     './STS_roberta_large/97llidoj/checkpoints/epoch=5-step=6480.ckpt')
-
-    # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
-    trainer = pl.Trainer(precision="16-mixed", accelerator='gpu',
-                         max_epochs=args.max_epoch, logger=wandb_logger, log_every_n_steps=1)
-
-    # Train part
+        project=args.project_name)
+    trainer = pl.Trainer(accelerator='gpu', max_epochs=args.max_epoch,
+                         logger=wandb_logger, log_every_n_steps=1)
     trainer.fit(model=model, datamodule=dataloader)
     trainer.test(model=model, datamodule=dataloader)
 

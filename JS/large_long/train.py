@@ -87,9 +87,9 @@ class Dataloader(pl.LightningDataModule):
             train_data = pd.read_csv(self.train_path)
             val_data = pd.read_csv(self.dev_path)
 
-            # 라벨이 0인 데이터를 1000개만 사용합니다.
+            # 라벨이 0인 데이터를 800개만 사용합니다.
             train_data_label_0 = train_data[train_data['label'] == 0].sample(
-                n=1000)
+                n=800)
             train_data_label_n = train_data[train_data['label'] != 0]
             train_data = pd.concat([train_data_label_0, train_data_label_n])
 
@@ -197,7 +197,7 @@ class Model(pl.LightningModule):
 
 if __name__ == '__main__':
     # seed
-    seed = 42
+    seed = 123456789
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)  # if use multi-GPU
@@ -212,9 +212,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', default="klue/roberta-large", type=str)
     parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_epoch', default=6, type=int)
+    parser.add_argument('--max_epoch', default=15, type=int)
     parser.add_argument('--shuffle', default=True)
-    parser.add_argument('--learning_rate', default=1e-5, type=float)
+    parser.add_argument('--learning_rate', default=5e-6, type=float)
     # parser.add_argument('--train_path', default='~/data/train.csv')
     parser.add_argument(
         '--train_path', default='~/data/train_resampled_swap.csv')
