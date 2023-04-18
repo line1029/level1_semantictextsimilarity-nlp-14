@@ -165,8 +165,8 @@ class Model(pl.LightningModule):
         model_name,
         lr,
         weight_decay,
-        # warmup_steps,
-        # total_steps,
+        warmup_steps,
+        total_steps,
         loss_func
     ):
         super().__init__()
@@ -175,8 +175,8 @@ class Model(pl.LightningModule):
         self.model_name = model_name
         self.lr = lr
         self.weight_decay = weight_decay
-        # self.warmup_steps = warmup_steps
-        # self.total_steps = total_steps
+        self.warmup_steps = warmup_steps
+        self.total_steps = total_steps
 
         # 사용할 모델을 호출합니다.
         self.plm = transformers.AutoModelForSequenceClassification.from_pretrained(
@@ -232,26 +232,28 @@ class Model(pl.LightningModule):
             lr=self.lr,
             weight_decay=self.weight_decay
         )
-        scheduler = torch.optim.lr_scheduler.StepLR(
-            optimizer, step_size=1, gamma=0.96)
-        # lr scheduler를 이용해 warm-up stage 추가
-        # scheduler = transformers.get_inverse_sqrt_schedule(
-        #     optimizer=optimizer,
-        #     num_warmup_steps=self.warmup_steps
-        # )
-        # return (
-        #     [optimizer],
-        #     [
-        #         {
-        #             'scheduler': scheduler,
-        #             'interval': 'step',
-        #             'frequency': 1,
-        #             'reduce_on_plateau': False,
-        #             'monitor': 'val_loss',
-        #         }
-        #     ]
-        # )
-        return [optimizer], [scheduler]
+        if self.warmup_steps is not None:
+            # lr scheduler를 이용해 warm-up stage 추가
+            scheduler = transformers.get_inverse_sqrt_schedule(
+                optimizer=optimizer,
+                num_warmup_steps=self.warmup_steps
+            )
+            return (
+                [optimizer],
+                [
+                    {
+                        'scheduler': scheduler,
+                        'interval': 'step',
+                        'frequency': 1,
+                        'reduce_on_plateau': False,
+                        'monitor': 'val_loss',
+                    }
+                ]
+            )
+        else:
+            scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer, step_size=1, gamma=0.96)
+            return [optimizer], [scheduler]
 
 
 class WModel(Model):
@@ -316,6 +318,8 @@ if __name__ == '__main__':
     parser.add_argument('--run_name', default="001")
     parser.add_argument('--project_name', default="STS_snunlp_9250")
     parser.add_argument('--eda', default=True)
+    parser.add_argument('--warmup_steps', default=None)
+    parser.add_argument('--total_steps', default=None)
     args = parser.parse_args()
 
     # actual model train
@@ -328,15 +332,21 @@ if __name__ == '__main__':
     # # dataloader와 model을 생성합니다.
     dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
                             args.test_path, args.predict_path)
-    # dataloader.setup()
-    # total_steps = (len(dataloader.train_dataloader())) * args.max_epoch
-    # warmup_steps = int(len(dataloader.train_dataloader()) * args.warm_up_ratio)
+
+    if args.warm_up_ratio is not None:
+        dataloader.setup()
+        args.total_steps = (
+            len(dataloader.train_dataloader())) * args.max_epoch
+        args.warmup_steps = int(
+            len(dataloader.train_dataloader()) * args.warm_up_ratio)
+
     model = Model(
         args.model_name,
         args.learning_rate,
         args.weight_decay,
-        # warmup_steps,
-        # total_steps,
+        args.use_warmup_steps,
+        args.warmup_steps,
+        args.total_steps,
         args.loss_func
     )
 
