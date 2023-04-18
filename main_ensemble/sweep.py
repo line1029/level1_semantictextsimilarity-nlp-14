@@ -6,7 +6,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 from seed import *  # seed setting module
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
-from train import Model, CustomModelCheckpoint, ResampledDataloader
+from train import Model, Dataloader, CustomModelCheckpoint
 
 
 if __name__ == '__main__':
@@ -88,7 +88,7 @@ if __name__ == '__main__':
                 project=args.project_name
             )
             dataloader = Dataloader(config.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
-                                             args.test_path, args.predict_path)
+                                    args.test_path, args.predict_path)
             # warmup_steps = int((15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.warm_up_ratio)
             model = Model(
                 config.model_name,
