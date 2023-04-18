@@ -89,14 +89,17 @@ if __name__ == '__main__':
             )
             dataloader = Dataloader(config.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
                                     args.test_path, args.predict_path)
-            # warmup_steps = int((15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.warm_up_ratio)
+            warmup_steps = total_steps = None
+            if "warm_up_ratio" in config:
+                total_steps = (15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.max_epoch
+                warmup_steps = int((15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.warm_up_ratio)
             model = Model(
                 config.model_name,
                 config.learning_rate,
                 config.weight_decay,
-                # warmup_steps,
-                # total_steps,
-                config.loss_func
+                config.loss_func,
+                warmup_steps,
+                total_steps,
             )
 
             trainer = pl.Trainer(

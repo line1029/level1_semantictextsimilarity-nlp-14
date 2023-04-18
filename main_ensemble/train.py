@@ -137,9 +137,9 @@ class Model(pl.LightningModule):
         model_name,
         lr,
         weight_decay,
+        loss_func,
         warmup_steps,
-        total_steps,
-        loss_func
+        total_steps
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -228,26 +228,6 @@ class Model(pl.LightningModule):
             return [optimizer], [scheduler]
 
 
-class WModel(Model):
-    def __init__(
-        self,
-        model_name,
-        lr,
-        weight_decay,
-        warmup_steps,
-        # total_steps,
-        loss_func
-    ):
-        super().__init__(
-            self,
-            model_name,
-            lr,
-            weight_decay,
-            # warmup_steps,
-            # total_steps,
-            loss_func
-        )
-        self.warmup_steps = warmup_steps
 
 
 class CustomModelCheckpoint(ModelCheckpoint):
@@ -289,9 +269,6 @@ if __name__ == '__main__':
     parser.add_argument('--loss_func', default="MSE")
     parser.add_argument('--run_name', default="001")
     parser.add_argument('--project_name', default="STS_snunlp_9250")
-    parser.add_argument('--eda', default=True)
-    parser.add_argument('--warmup_steps', default=None)
-    parser.add_argument('--total_steps', default=None)
     args = parser.parse_args()
 
     # actual model train
@@ -305,21 +282,20 @@ if __name__ == '__main__':
     dataloader = Dataloader(args.model_name, args.batch_size, args.shuffle, args.train_path, args.dev_path,
                             args.test_path, args.predict_path)
 
+    total_steps = warmup_steps = None
     if args.warm_up_ratio is not None:
         dataloader.setup()
-        args.total_steps = (
-            len(dataloader.train_dataloader())) * args.max_epoch
-        args.warmup_steps = int(
-            len(dataloader.train_dataloader()) * args.warm_up_ratio)
+        total_steps = (15900 // args.batch_size + (15900 % args.batch_size != 0)) * args.max_epoch
+        warmup_steps = int((15900 // args.batch_size + (15900 % args.batch_size != 0)) * args.warm_up_ratio)
 
     model = Model(
         args.model_name,
         args.learning_rate,
         args.weight_decay,
         args.use_warmup_steps,
-        args.warmup_steps,
-        args.total_steps,
-        args.loss_func
+        args.loss_func,
+        warmup_steps,
+        total_steps,
     )
 
     # model = torch.load('model.pt')
