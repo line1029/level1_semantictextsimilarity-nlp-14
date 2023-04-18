@@ -1,11 +1,11 @@
-import pytorch_lightning as pl
 import argparse
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 
 import wandb
 from pytorch_lightning.loggers import WandbLogger
 
 from seed import *  # seed setting module
-from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 from train import Model, Dataloader, CustomModelCheckpoint
 
 
@@ -20,7 +20,6 @@ if __name__ == '__main__':
     parser.add_argument('--predict_path', default='~/data/test.csv')
     parser.add_argument(
         '--project_name', default="STS_klue_rl_resampled_sweep_L1_MS")
-    parser.add_argument('--eda', default=True)
     args = parser.parse_args()
 
     # HP Tuning
@@ -91,8 +90,10 @@ if __name__ == '__main__':
                                     args.test_path, args.predict_path)
             warmup_steps = total_steps = None
             if "warm_up_ratio" in config:
-                total_steps = (15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.max_epoch
-                warmup_steps = int((15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.warm_up_ratio)
+                total_steps = (15900 // config.batch_size + (15900 %
+                               config.batch_size != 0)) * config.max_epoch
+                warmup_steps = int((15900 // config.batch_size + (15900 %
+                                   config.batch_size != 0)) * config.warm_up_ratio)
             model = Model(
                 config.model_name,
                 config.learning_rate,

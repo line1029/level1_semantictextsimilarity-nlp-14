@@ -1,19 +1,18 @@
 import argparse
-
 import pandas as pd
-
 from tqdm.auto import tqdm
 
 import transformers
 import torch
 import torchmetrics
+
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.tuner import Tuner
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
 
 from itertools import chain
-from seed import *
+from seed import *  # seed setting module
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -21,15 +20,15 @@ class Dataset(torch.utils.data.Dataset):
         self.inputs = inputs
         self.targets = targets
 
-    # 학습 및 추론 과정에서 데이터를 1개씩 꺼내오는 곳
+    # 학습 및 추론 과정에서 데이터를 1개씩 꺼내옴
     def __getitem__(self, idx):
-        # 정답이 있다면 else문을, 없다면 if문을 수행합니다
+        # 정답이 있다면 else문을, 없다면 if문을 수행
         if len(self.targets) == 0:
             return torch.tensor(self.inputs[idx])
         else:
             return torch.tensor(self.inputs[idx]), torch.tensor(self.targets[idx])
 
-    # 입력하는 개수만큼 데이터를 사용합니다
+    # 입력하는 개수만큼 데이터를 사용
     def __len__(self):
         return len(self.inputs)
 
@@ -95,8 +94,7 @@ class Dataloader(pl.LightningDataModule):
             # 검증데이터 준비
             val_inputs, val_targets = self.preprocessing(val_data)
 
-            # train 데이터만 shuffle을 적용해줍니다, 필요하다면 val, test 데이터에도 shuffle을 적용할 수 있습니다
-            # self.train_dataset = Dataset(train_inputs, train_targets)
+            # 검증데이터 세팅
             self.val_dataset = Dataset(val_inputs, val_targets)
         else:
             # 평가데이터 준비
@@ -109,13 +107,19 @@ class Dataloader(pl.LightningDataModule):
             self.predict_dataset = Dataset(predict_inputs, [])
 
     def train_dataloader(self):
-        tmp = pd.DataFrame({'data': self.train_inputs, 'label': list(
-            chain.from_iterable(self.train_targets))})
+        """_summary_
 
-        train_data = pd.concat([tmp[tmp.label == i/10].sample(600, replace=True) for i in range(0, 51, 2)] +
-                               [tmp[tmp.label == i/10].sample(60, replace=True) for i in range(5, 46, 10)])
-        print("New Dataset Loaded")
-        self.train_dataset = Dataset(train_data.data.tolist(), 
+        토크나이징 된 데이터를 샘플링
+
+        Returns:
+            _type_: _description_
+        """
+        origin_data = pd.DataFrame({'data': self.train_inputs, 'label': list(
+            chain.from_iterable(self.train_targets))})
+        # 소수점 첫째자리 짝수면 600개, 홀수면 60개 샘플링
+        train_data = pd.concat([origin_data[origin_data.label == i/10].sample(600, replace=True) for i in range(0, 51, 2)] +
+                               [origin_data[origin_data.label == i/10].sample(60, replace=True) for i in range(5, 46, 10)])
+        self.train_dataset = Dataset(train_data.data.tolist(),
                                      [[i] for i in train_data.label])
         return torch.utils.data.DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle)
 
@@ -127,8 +131,6 @@ class Dataloader(pl.LightningDataModule):
 
     def predict_dataloader(self):
         return torch.utils.data.DataLoader(self.predict_dataset, batch_size=self.batch_size)
-
-
 
 
 class Model(pl.LightningModule):
@@ -150,10 +152,10 @@ class Model(pl.LightningModule):
         self.warmup_steps = warmup_steps
         self.total_steps = total_steps
 
-        # 사용할 모델을 호출합니다.
+        # 사용할 모델을 호출
         self.plm = transformers.AutoModelForSequenceClassification.from_pretrained(
             pretrained_model_name_or_path=model_name, num_labels=1)
-        # Loss 계산을 위해 사용될 손실함수를 호출합니다.
+        # Loss 계산을 위해 사용될 손실함수를 호출
         if loss_func == "MSE":
             self.loss_func = torch.nn.MSELoss()
         elif loss_func == "L1":
@@ -204,8 +206,8 @@ class Model(pl.LightningModule):
             lr=self.lr,
             weight_decay=self.weight_decay
         )
+        # warmup stage 있는 경우
         if self.warmup_steps is not None:
-            # lr scheduler를 이용해 warm-up stage 추가
             scheduler = transformers.get_inverse_sqrt_schedule(
                 optimizer=optimizer,
                 num_warmup_steps=self.warmup_steps
@@ -222,17 +224,16 @@ class Model(pl.LightningModule):
                     }
                 ]
             )
+        # warmup stage 없는 경우
         else:
             scheduler = torch.optim.lr_scheduler.StepLR(
                 optimizer, step_size=1, gamma=0.96)
             return [optimizer], [scheduler]
 
 
-
-
+# 모델 저장을 위한 class
 class CustomModelCheckpoint(ModelCheckpoint):
     def on_validation_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
-        """Save a checkpoint at the end of the validation stage."""
         if not self._should_skip_saving_checkpoint(trainer) and not self._should_save_on_train_epoch_end(trainer):
             monitor_candidates = self._monitor_candidates(trainer)
             current = monitor_candidates.get(self.monitor)
@@ -269,13 +270,15 @@ if __name__ == '__main__':
     parser.add_argument('--loss_func', default="MSE")
     parser.add_argument('--run_name', default="001")
     parser.add_argument('--project_name', default="STS_snunlp_9250")
+    parser.add_argument('--entity', default=None)   # wandb team name
     args = parser.parse_args()
 
     # actual model train
     # wandb logger
     wandb_logger = WandbLogger(
         project=args.project_name,
-        name=f"{args.loss_func}_{args.learning_rate}_{args.batch_size}_{args.weight_decay}_{args.max_epoch}_steplr_seed:{'_'.join(map(str,seed))}"
+        name=f"{args.loss_func}_{args.learning_rate}_{args.batch_size}_{args.weight_decay}_{args.max_epoch}_steplr_seed:{'_'.join(map(str,seed))}",
+        entity=args.entity
     )
 
     # # dataloader와 model을 생성합니다.
@@ -284,15 +287,15 @@ if __name__ == '__main__':
 
     total_steps = warmup_steps = None
     if args.warm_up_ratio is not None:
-        dataloader.setup()
-        total_steps = (15900 // args.batch_size + (15900 % args.batch_size != 0)) * args.max_epoch
-        warmup_steps = int((15900 // args.batch_size + (15900 % args.batch_size != 0)) * args.warm_up_ratio)
+        total_steps = (15900 // args.batch_size + (15900 %
+                       args.batch_size != 0)) * args.max_epoch
+        warmup_steps = int((15900 // args.batch_size + (15900 %
+                           args.batch_size != 0)) * args.warm_up_ratio)
 
     model = Model(
         args.model_name,
         args.learning_rate,
         args.weight_decay,
-        args.use_warmup_steps,
         args.loss_func,
         warmup_steps,
         total_steps,
@@ -302,17 +305,19 @@ if __name__ == '__main__':
 
     # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
     trainer = pl.Trainer(
-        precision="16-mixed",
-        accelerator='gpu',
+        precision="16-mixed",                   # 16-bit mixed precision
+        accelerator='gpu',                      # GPU 사용
+        # dataloader를 매 epoch마다 reload해서 resampling
         reload_dataloaders_every_n_epochs=1,
-        max_epochs=args.max_epoch,
-        logger=wandb_logger,
-        log_every_n_steps=1,
-        val_check_interval=0.25,
-        check_val_every_n_epoch=1,
+        max_epochs=args.max_epoch,            # 최대 epoch 수
+        logger=wandb_logger,                    # wandb logger 사용
+        log_every_n_steps=1,                    # 1 step마다 로그 기록
+        val_check_interval=0.25,                # 0.25 epoch마다 validation
+        check_val_every_n_epoch=1,              # val_check_interval의 기준이 되는 epoch 수
         callbacks=[
+            # learning rate를 매 step마다 기록
             LearningRateMonitor(logging_interval='step'),
-            EarlyStopping(
+            EarlyStopping(                      # validation pearson이 8번 이상 개선되지 않으면 학습을 종료
                 'val_pearson',
                 patience=8,
                 mode='max',
