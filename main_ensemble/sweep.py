@@ -87,7 +87,7 @@ if __name__ == '__main__':
             wandb_logger = WandbLogger(
                 project=args.project_name
             )
-            dataloader = ResampledDataloader(config.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
+            dataloader = Dataloader(config.model_name, config.batch_size, args.shuffle, args.train_path, args.dev_path,
                                              args.test_path, args.predict_path)
             # warmup_steps = int((15900 // config.batch_size + (15900 % config.batch_size != 0)) * config.warm_up_ratio)
             model = Model(
