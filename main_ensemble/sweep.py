@@ -4,7 +4,7 @@ import argparse
 import wandb
 from pytorch_lightning.loggers import WandbLogger
 
-from seed import *
+from seed import *  # seed setting module
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 from train import Model, CustomModelCheckpoint, ResampledDataloader
 
@@ -12,7 +12,7 @@ from train import Model, CustomModelCheckpoint, ResampledDataloader
 if __name__ == '__main__':
     # set parser
     parser = argparse.ArgumentParser()
-    parser.add_argument('--shuffle', default=True)
+    parser.add_argument('--shuffle', default=True)  # shuffle train data
     parser.add_argument(
         '--train_path', default='~/data/train_sentence_swap.csv')
     parser.add_argument('--dev_path', default='~/data/dev.csv')
@@ -69,6 +69,13 @@ if __name__ == '__main__':
     ver = set_version()
 
     def sweep_train(config=None):
+        """
+        sweep에서 config로 run
+        wandb에 로깅
+
+        Args:
+            config (_type_, optional): _description_. Defaults to None.
+        """
 
         with wandb.init(config=config) as run:
             config = wandb.config
@@ -105,13 +112,13 @@ if __name__ == '__main__':
                 callbacks=[
                     # learning rate를 매 step마다 기록
                     LearningRateMonitor(logging_interval='step'),
-                    EarlyStopping(                      # validation loss가 8번 이상 개선되지 않으면 학습을 종료
+                    EarlyStopping(                      # validation pearson이 8번 이상 개선되지 않으면 학습을 종료
                         'val_pearson',
                         patience=8,
                         mode='max',
                         check_finite=False
                     ),
-                    CustomModelCheckpoint(             # validation pearsion이 기준보다 높으면 저장
+                    CustomModelCheckpoint(             # validation pearson이 기준보다 높으면 저장
                         './save/',
                         f'klue_rl_{next(ver):0>4}_{{val_pearson:.4f}}',
                         monitor='val_pearson',
