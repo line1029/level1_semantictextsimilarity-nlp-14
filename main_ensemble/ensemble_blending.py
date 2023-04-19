@@ -124,16 +124,16 @@ if __name__ == '__main__':
     # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
     parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', default=32, type=int)
+    parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--max_epoch', default=20, type=int)
-    parser.add_argument('--input_size', default=12, type=int)
+    parser.add_argument('--input_size', default=8, type=int)
     parser.add_argument('--hidden_size', default=64, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=1e-4, type=float)
-    parser.add_argument('--train_path', default='~/data/dev_pred_input_size_12.csv')
-    parser.add_argument('--dev_path', default='~/data/dev_pred_input_size_12.csv')
-    parser.add_argument('--test_path', default='~/data/dev_pred_input_size_12.csv')
-    parser.add_argument('--predict_path', default='~/data/test_pred_input_size_12.csv')
+    parser.add_argument('--train_path', default='~/data/dev_pred_input_size_8.csv')
+    parser.add_argument('--dev_path', default='~/data/dev_pred_input_size_8.csv')
+    parser.add_argument('--test_path', default='~/data/dev_pred_input_size_8.csv')
+    parser.add_argument('--predict_path', default='~/data/test_pred_input_size_8.csv')
     parser.add_argument('--loss_func', default="MSE")
     args = parser.parse_args()
 
@@ -146,24 +146,24 @@ if __name__ == '__main__':
     # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
     wandb_logger = WandbLogger(
         project='STS-Ensemble2',
-        name=f'Blending_lr_{args.input_size}:{args.learning_rate}_hs:{args.hidden_size}_bs:{args.batch_size}_epoch_20_seed:{"_".join(map(str, seed))}',
+        name=f'Blending_{args.input_size}_lr:{args.learning_rate}_hs:{args.hidden_size}_bs:{args.batch_size}_epoch_{args.max_epoch}_seed:{"_".join(map(str, seed))}',
         entity='boostcamp-sts-14'
     )
     trainer = pl.Trainer(
         accelerator="gpu",
-        max_epochs=20,
+        max_epochs=args.max_epoch,
         logger=wandb_logger,
         log_every_n_steps=1,
         val_check_interval=0.25,
         check_val_every_n_epoch=1,
         callbacks=[
             LearningRateMonitor(logging_interval='step'),
-            EarlyStopping(
-                'val_pearson',
-                patience=8,
-                mode='max',
-                check_finite=False
-            ),
+            # EarlyStopping(
+            #     'val_pearson',
+            #     patience=8,
+            #     mode='max',
+            #     check_finite=False
+            # ),
             CustomModelCheckpoint(
                 './save/',
                 'blending_{val_pearson:.4f}',
@@ -198,4 +198,4 @@ if __name__ == '__main__':
     # output 형식을 불러와서 예측된 결과로 바꿔주고, output.csv로 출력합니다.
     output = pd.read_csv('~/data/sample_submission.csv')
     output['target'] = predictions
-    output.to_csv('output.csv', index=False)
+    output.to_csv(f'Blending_{args.input_size}_lr_{args.learning_rate}_hs_{args.hidden_size}_bs_{args.batch_size}_epoch_{args.max_epoch}_seed_{"_".join(map(str, seed))}.csv', index=False)

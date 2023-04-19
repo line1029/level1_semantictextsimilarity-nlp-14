@@ -39,18 +39,18 @@ if __name__ == '__main__':
     parser.add_argument('--loss_func', default="MSE")
     args = parser.parse_args()
 
-    # candidates = ['klue_rl_L1_0005_val_pearson=0.9341.pt', 'klue_rl_MSE_0001_val_pearson=0.9274.pt',
-    #               'klue_rl_L1_001_9288.pt', 'klue_rl_MSE_0007_val_pearson=0.9335.pt',
-    #               'snunlp_0004_val_pearson=0.9340.pt', 'snunlp_0015_val_pearson=0.9314.pt',
-    #               'snunlp_0011_val_pearson=0.9312.pt', 'snunlp_MSE_001_val_pearson=0.9316.pt']
-    candidates = [
-        'klue_rl_L1_0004_val_pearson=0.9314.pt', 'klue_rl_MSE_0001_val_pearson=0.9311.pt',
-        'snunlp_0006_val_pearson=0.9309.pt', 'snunlp_0016_val_pearson=0.9312.pt'
-    ]
+    candidates = ['klue_rl_L1_0005_val_pearson=0.9341.pt', 'klue_rl_MSE_0001_val_pearson=0.9274.pt',
+                  'klue_rl_L1_001_9288.pt', 'klue_rl_MSE_0007_val_pearson=0.9335.pt',
+                  'snunlp_0004_val_pearson=0.9340.pt', 'snunlp_0015_val_pearson=0.9314.pt',
+                  'snunlp_0011_val_pearson=0.9312.pt', 'snunlp_MSE_001_val_pearson=0.9316.pt']
+    # candidates = [
+    #     'klue_rl_L1_0004_val_pearson=0.9314.pt', 'klue_rl_MSE_0001_val_pearson=0.9311.pt',
+    #     'snunlp_0006_val_pearson=0.9309.pt', 'snunlp_0016_val_pearson=0.9312.pt'
+    # ]
 
-
-    dev_pred = []
-    test_pred = []
+    train_pred = []
+    # dev_pred = []
+    # test_pred = []
     for model_path in candidates:
         model = torch.load('./save/' + model_path)
         if 'klue' in model_path:
@@ -60,21 +60,29 @@ if __name__ == '__main__':
             model_name = 'snunlp/KR-ELECTRA-discriminator'
             batch_size = 48
         
-        dev_dataloader = Dataloader(model_name, batch_size, args.shuffle, args.train_path, args.dev_path,
-                            args.test_path, args.test_path)
+        train_dataloader = Dataloader(model_name, batch_size, args.shuffle, args.train_path, args.dev_path,
+                            args.test_path, args.train_path)
         
-        test_dataloader = Dataloader(model_name, batch_size, args.shuffle, args.train_path, args.dev_path,
-                            args.test_path, args.predict_path)
+        # dev_dataloader = Dataloader(model_name, batch_size, args.shuffle, args.train_path, args.dev_path,
+        #                     args.test_path, args.test_path)
+        
+        # test_dataloader = Dataloader(model_name, batch_size, args.shuffle, args.train_path, args.dev_path,
+        #                     args.test_path, args.predict_path)
         
         trainer = pl.Trainer(accelerator='gpu')
 
-        dev_pred.append(torch.cat(trainer.predict(model=model, datamodule=dev_dataloader)))
-        test_pred.append(torch.cat(trainer.predict(model=model, datamodule=test_dataloader)))
+        train_pred.append(torch.cat(trainer.predict(model=model, datamodule=train_dataloader)))
+        # dev_pred.append(torch.cat(trainer.predict(model=model, datamodule=dev_dataloader)))
+        # test_pred.append(torch.cat(trainer.predict(model=model, datamodule=test_dataloader)))
     
-    dev_pred = torch.stack(dev_pred).transpose(0, 1)
-    test_pred = torch.stack(test_pred).transpose(0, 1)
-    dev = pd.DataFrame(dev_pred, columns=candidates)
+    train_pred = torch.stack(train_pred).transpose(0, 1)
+    # dev_pred = torch.stack(dev_pred).transpose(0, 1)
+    # test_pred = torch.stack(test_pred).transpose(0, 1)
+    train = pd.DataFrame(train_pred, columns=candidates)
+    train['label'] = pd.read_csv(args.train_path)['label']
+    train.to_csv('train_train_pred_base8.csv', index=False)
+    # dev = pd.DataFrame(dev_pred, columns=candidates)
     # dev['label'] = pd.read_csv(args.dev_path)['label']
-    dev.to_csv('dev_pred_add4.csv', index=False)
-    test = pd.DataFrame(test_pred, columns=candidates)
-    test.to_csv('test_pred_add4.csv', index=False)
+    # dev.to_csv('dev_train_pred_base8.csv', index=False)
+    # test = pd.DataFrame(test_pred, columns=candidates)
+    # test.to_csv('test_train_pred_base8.csv', index=False)
