@@ -7,19 +7,30 @@ from seed import *
 from train import *
 
 
+# output 만들 dataset 경로 설정
+def set_path_to_predict(args):
+    predict_path = None
+    if args.predict == "train":
+        predict_path = args.train_path
+    elif args.predict == "dev":
+        predict_path = args.test_path
+    else:  # args.predict == "test":
+        predict_path = args.predict_path
+
+    return predict_path
+
+
 if __name__ == '__main__':
-    # 하이퍼 파라미터 등 각종 설정값을 입력받습니다
-    # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
-    # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
+    # set parser
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', default='klue/roberta-large', type=str)
-    parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument(
         '--train_path', default='~/data/train_sentence_swap.csv')
     parser.add_argument('--dev_path', default='~/data/dev.csv')
     parser.add_argument('--test_path', default='~/data/dev.csv')
     parser.add_argument('--predict_path', default='~/data/test.csv')
+    parser.add_argument('--predict', default="test",
+                        type=str)  # output 만들 dataset (train, dev, test)
     args = parser.parse_args()
 
     # 불러올 모델들의 pt파일
@@ -32,9 +43,7 @@ if __name__ == '__main__':
     #     'snunlp_0006_val_pearson=0.9309.pt', 'snunlp_0016_val_pearson=0.9312.pt'
     # ]
 
-    train_pred = []
-    # dev_pred = []
-    # test_pred = []
+    prediction = []
 
     for model_path in candidates:
         model = torch.load('./save/' + model_path)
@@ -45,33 +54,19 @@ if __name__ == '__main__':
             model_name = 'snunlp/KR-ELECTRA-discriminator'
             batch_size = 48
 
-        train_dataloader = Dataloader(model_name, batch_size, args.shuffle, args.train_path, args.dev_path,
-                                      args.test_path, args.train_path)
-
-        # dev_dataloader = Dataloader(model_name, batch_size, args.shuffle, args.train_path, args.dev_path,
-        #                     args.test_path, args.test_path)
-
-        # test_dataloader = Dataloader(model_name, batch_size, args.shuffle, args.train_path, args.dev_path,
-        #                     args.test_path, args.predict_path)
-
+        # output 만들 dataset load
+        dataloader = Dataloader(model_name, batch_size, args.shuffle, args.train_path, args.dev_path,
+                                args.test_path, set_path_to_predict(args))
+        # trainer 설정
         trainer = pl.Trainer(accelerator='gpu')
-
-        train_pred.append(torch.cat(trainer.predict(
-            model=model, datamodule=train_dataloader)))
-        # dev_pred.append(torch.cat(trainer.predict(model=model, datamodule=dev_dataloader)))
-        # test_pred.append(torch.cat(trainer.predict(model=model, datamodule=test_dataloader)))
-
-    train_pred = torch.stack(train_pred).transpose(0, 1)
-    # dev_pred = torch.stack(dev_pred).transpose(0, 1)
-    # test_pred = torch.stack(test_pred).transpose(0, 1)
-
-    train = pd.DataFrame(train_pred, columns=candidates)
-    train['label'] = pd.read_csv(args.train_path)['label']
-    train.to_csv('train_train_pred_base8.csv', index=False)
-
-    # dev = pd.DataFrame(dev_pred, columns=candidates)
-    # dev['label'] = pd.read_csv(args.dev_path)['label']
-    # dev.to_csv('dev_train_pred_base8.csv', index=False)
-
-    # test = pd.DataFrame(test_pred, columns=candidates)
-    # test.to_csv('test_train_pred_base8.csv', index=False)
+        # predict한 뒤 prediction에 append
+        prediction.append(torch.cat(trainer.predict(
+            model=model, datamodule=dataloader)))
+    # transpose
+    prediction = torch.stack(prediction).transpose(0, 1)
+    # output 만들기
+    output = pd.DataFrame(prediction, columns=candidates)
+    if args.predict != "test":
+        output['label'] = pd.read_csv(set_path_to_predict(args))['label']
+    output.to_csv(
+        f'{args.predict}_train_pred_base{len(candidates)}.csv', index=False)
