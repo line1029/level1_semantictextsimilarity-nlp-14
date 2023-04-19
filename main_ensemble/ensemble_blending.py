@@ -1,39 +1,32 @@
 import argparse
-
 import pandas as pd
-
-from tqdm.auto import tqdm
-
-import transformers
 import torch
 import torchmetrics
+
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.tuner import Tuner
-from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
-import numpy as np
-import random
-import wandb
-from itertools import chain
+from pytorch_lightning.callbacks import LearningRateMonitor
+
 from seed import *
 from train import *
 
 
 class BlendingEnsembleModel(pl.LightningModule):
-    def __init__(self, train_path, test_path, input_size, hidden_size, lr, loss_func, batch_size):
+    def __init__(self, train_path, test_path, input_size, hidden_size, shuffle,  lr, loss_func, batch_size):
         super().__init__()
         self.save_hyperparameters()
         self.lr = lr
+        self.train_path = train_path
+        self.test_path = test_path
+        self.shuffle = shuffle
+        self.batch_size = batch_size
+
         if loss_func == "MSE":
             self.loss_func = torch.nn.MSELoss()
         elif loss_func == "L1":
             self.loss_func = torch.nn.L1Loss()
         elif loss_func == "Huber":
             self.loss_func = torch.nn.HuberLoss()
-        self.train_path = train_path
-        self.test_path = test_path
-        self.shuffle = True
-        self.batch_size = batch_size
 
         self.model = torch.nn.Sequential(
             torch.nn.Linear(input_size, hidden_size),
@@ -47,37 +40,37 @@ class BlendingEnsembleModel(pl.LightningModule):
 
     def forward(self, x):
         return self.model(x).squeeze()
-    
+
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
         loss = self.loss_func(logits, y.float())
         self.log("train_loss", loss)
         return loss
-    
+
     def validation_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
         loss = self.loss_func(logits, y.float())
         self.log("val_loss", loss)
-
-        self.log("val_pearson", torchmetrics.functional.pearson_corrcoef(logits.squeeze(), y.squeeze()))
+        self.log("val_pearson", torchmetrics.functional.pearson_corrcoef(
+            logits.squeeze(), y.squeeze()))
 
         return loss
-    
+
     def predict_step(self, batch, batch_idx):
         x = batch
         logits = self(x)
 
         return logits.squeeze()
-    
+
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
             self.parameters(),
             lr=self.lr
         )
         return optimizer
-    
+
     def preprocessing(self, data):
         # 타겟 데이터가 없으면 빈 배열을 리턴합니다.
         try:
@@ -94,7 +87,8 @@ class BlendingEnsembleModel(pl.LightningModule):
             train = pd.read_csv(self.train_path)
 
             train_inputs, train_targets = self.preprocessing(train)
-            self.train_dataset = self.val_dataset = Dataset(train_inputs, train_targets)
+            self.train_dataset = self.val_dataset = Dataset(
+                train_inputs, train_targets)
         else:
             # 평가데이터 준비
             test_data = pd.read_csv(self.train_path)
@@ -118,11 +112,8 @@ class BlendingEnsembleModel(pl.LightningModule):
         return torch.utils.data.DataLoader(self.predict_dataset, batch_size=self.batch_size)
 
 
-
 if __name__ == '__main__':
-    # 하이퍼 파라미터 등 각종 설정값을 입력받습니다
-    # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
-    # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
+    # set parser
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--max_epoch', default=20, type=int)
@@ -130,25 +121,27 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_size', default=64, type=int)
     parser.add_argument('--shuffle', default=True)
     parser.add_argument('--learning_rate', default=1e-4, type=float)
-    parser.add_argument('--train_path', default='~/data/dev_pred_input_size_8.csv')
-    parser.add_argument('--dev_path', default='~/data/dev_pred_input_size_8.csv')
-    parser.add_argument('--test_path', default='~/data/dev_pred_input_size_8.csv')
-    parser.add_argument('--predict_path', default='~/data/test_pred_input_size_8.csv')
+    parser.add_argument(
+        '--train_path', default='~/data/dev_pred_input_size_8.csv')
+    parser.add_argument(
+        '--dev_path', default='~/data/dev_pred_input_size_8.csv')
+    parser.add_argument(
+        '--test_path', default='~/data/dev_pred_input_size_8.csv')
+    parser.add_argument(
+        '--predict_path', default='~/data/test_pred_input_size_8.csv')
     parser.add_argument('--loss_func', default="MSE")
     args = parser.parse_args()
 
-    
     # seed
     seed = get_seed()
     set_seed(*seed)
 
-    # dataloader와 model을 생성합니다.
-    # gpu가 없으면 accelerator='cpu', 있으면 accelerator='gpu'
     wandb_logger = WandbLogger(
         project='STS-Ensemble2',
         name=f'Blending_{args.input_size}_lr:{args.learning_rate}_hs:{args.hidden_size}_bs:{args.batch_size}_epoch_{args.max_epoch}_seed:{"_".join(map(str, seed))}',
         entity='boostcamp-sts-14'
     )
+
     trainer = pl.Trainer(
         accelerator="gpu",
         max_epochs=args.max_epoch,
@@ -181,14 +174,13 @@ if __name__ == '__main__':
         args.predict_path,
         args.input_size,
         args.hidden_size,
+        args.shuffle,
         args.learning_rate,
         args.loss_func,
         args.batch_size
     )
 
-
     trainer.fit(model=model)
-
 
     predictions = trainer.predict(model=model)
 
@@ -198,4 +190,5 @@ if __name__ == '__main__':
     # output 형식을 불러와서 예측된 결과로 바꿔주고, output.csv로 출력합니다.
     output = pd.read_csv('~/data/sample_submission.csv')
     output['target'] = predictions
-    output.to_csv(f'Blending_{args.input_size}_lr_{args.learning_rate}_hs_{args.hidden_size}_bs_{args.batch_size}_epoch_{args.max_epoch}_seed_{"_".join(map(str, seed))}.csv', index=False)
+    output.to_csv(
+        f'Blending_{args.input_size}_lr_{args.learning_rate}_hs_{args.hidden_size}_bs_{args.batch_size}_epoch_{args.max_epoch}_seed_{"_".join(map(str, seed))}.csv', index=False)
