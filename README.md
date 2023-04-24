@@ -50,7 +50,7 @@
 
 # 3. 수행 절차 및 방법
 
-![Untitled](NLP%20Lv%201%20STS%20%E1%84%83%E1%85%A2%E1%84%92%E1%85%AC%20-%20WrapUp%20Report%20a2d7c3ba25aa46d3ab7b8d9a5110166f/Untitled.png)
+![Untitled](https://user-images.githubusercontent.com/45084974/233902139-fb2e2053-cd6e-45ad-bf93-5a9282dd81f8.png)
 
 # 4. 수행 결과
 
