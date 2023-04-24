@@ -1,4 +1,4 @@
-# NLP Lv. 1 STS 대회
+# NAVER boostcamp NLP Lv. 1 STS 대회
 
 **NLP-14조**
 
