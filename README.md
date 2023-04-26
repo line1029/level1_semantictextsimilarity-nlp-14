@@ -66,9 +66,6 @@
 | |____ckpt_to_pt.py
 | |____sweep.py
 | |____inference.py
-|____base_code
-| |____train.py
-| |____inference.py
 |____README.md
 ```
 
