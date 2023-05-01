@@ -1,0 +1,15 @@
+model_name: snunlp/KR-ELECTRA-discriminator
+batch_size: 16
+max_epoch: 10
+shuffle: true
+learning_rate: 1e-5
+train_path: ./data/train_sentence_swap.csv
+dev_path: ./data/dev.csv
+test_path: ./data/dev.csv
+predict_path: ./data/dev.csv
+weight_decay: 0.01
+warm_up_ratio: 0.3
+loss_func: MSE
+run_name: 001
+project_name: tmp
+entity: ~
