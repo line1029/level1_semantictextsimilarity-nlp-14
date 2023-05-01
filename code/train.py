@@ -1,4 +1,3 @@
-import argparse
 import pandas as pd
 from tqdm.auto import tqdm
 
@@ -13,6 +12,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping, Mode
 
 from itertools import chain
 from seed import *  # seed setting module
+from config import config as args
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -253,25 +253,7 @@ if __name__ == '__main__':
     # 하이퍼 파라미터 등 각종 설정값을 입력받습니다
     # 터미널 실행 예시 : python3 run.py --batch_size=64 ...
     # 실행 시 '--batch_size=64' 같은 인자를 입력하지 않으면 default 값이 기본으로 실행됩니다
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--model_name', default="snunlp/KR-ELECTRA-discriminator", type=str)
-    parser.add_argument('--batch_size', default=16, type=int)
-    parser.add_argument('--max_epoch', default=10, type=int)
-    parser.add_argument('--shuffle', default=True)
-    parser.add_argument('--learning_rate', default=2e-5, type=float)
-    parser.add_argument(
-        '--train_path', default='~/data/train_sentence_swap.csv')
-    parser.add_argument('--dev_path', default='~/data/dev.csv')
-    parser.add_argument('--test_path', default='~/data/dev.csv')
-    parser.add_argument('--predict_path', default='~/data/test.csv')
-    parser.add_argument('--weight_decay', default=0.01)
-    parser.add_argument('--warm_up_ratio', default=0.3)
-    parser.add_argument('--loss_func', default="MSE")
-    parser.add_argument('--run_name', default="001")
-    parser.add_argument('--project_name', default="STS_snunlp_9250")
-    parser.add_argument('--entity', default=None)   # wandb team name
-    args = parser.parse_args()
+
 
     # actual model train
     # wandb logger
