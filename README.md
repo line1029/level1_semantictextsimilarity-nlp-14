@@ -1,8 +1,8 @@
-# NAVER boostcamp NLP Lv. 1 STS 대회
+# *** NLP Lv. 1 STS 대회
 
 **NLP-14조**
 
-김민혁_T5031, 김세형_T5038, 이주형A_T5154, 이준선_T5157, 전민수_T5183
+***, ***, ***, ***, ***
 
 # 1. 프로젝트 개요
 
@@ -20,29 +20,29 @@
 
 # 2. 팀 구성 및 역할
 
-### 전민수_T5183
+### ***
 
 - PLM 모델 분석 및 모델별 성능 비교
 - 데이터 분포에 따른 학습 데이터의 resampling 수행
 - 선정된 PLM 모델로 STS 태스크 수행 모델 설계 및 튜닝, 그 중 성능이 높은 모델 기준으로 앙상블 모델 설계 및 튜닝
 
-### 김민혁_T5031
+### ***
 
 - Data Augmentation - KLUE/Roberta large 기반 Synonym 교체
 - Data Preprocessing - Konlpy 맞춤법 교정 시도
 
-### 김세형_T5038
+### ***
 
 - Hyperparameter tuning tool 탐색 (Optuna, Sweep) 및 다수 모델 tuning
 - K-fold cross validation 시도
 - 다수의 학습 방법론 실험 및 검증
 
-### 이주형A_T5154
+### ***
 
 - ******************************************시각화 및 전처리:****************************************** 데이터 분포 분석 및 시각화, 데이터 전처리
 - **데이터 증강**: Pororo 기반 문장 패러프레이징
 
-### 이준선_T5157
+### ***
 
 - hyperparameter tuning tool 적용 (sweep)
 - learning rate scheduler 실험
